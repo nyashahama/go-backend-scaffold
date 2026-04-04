@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -19,7 +20,10 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Han
 				return
 			}
 
-			ip := r.RemoteAddr
+			ip, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				ip = r.RemoteAddr
+			}
 			key := fmt.Sprintf("ratelimit:%s", ip)
 			ctx := context.Background()
 
