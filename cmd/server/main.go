@@ -74,7 +74,6 @@ func main() {
 	router := server.NewRouter(cfg, logger, rdb, handlers)
 	srv := server.New(router, cfg.Port, logger)
 
-	logger.Info("starting server", "port", cfg.Port, "env", cfg.Env)
 	if err := srv.Start(); err != nil {
 		logger.Error("server error", "error", err)
 		os.Exit(1)

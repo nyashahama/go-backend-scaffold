@@ -19,11 +19,12 @@ type Server struct {
 func New(handler http.Handler, port string, logger *slog.Logger) *Server {
 	return &Server{
 		httpServer: &http.Server{
-			Addr:         fmt.Sprintf(":%s", port),
-			Handler:      handler,
-			ReadTimeout:  10 * time.Second,
-			WriteTimeout: 30 * time.Second,
-			IdleTimeout:  60 * time.Second,
+			Addr:              fmt.Sprintf(":%s", port),
+			Handler:           handler,
+			ReadTimeout:       10 * time.Second,
+			ReadHeaderTimeout: 5 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       60 * time.Second,
 		},
 		logger: logger,
 	}
@@ -54,6 +55,10 @@ func (s *Server) Start() error {
 		if err := s.httpServer.Shutdown(ctx); err != nil {
 			s.httpServer.Close()
 			return fmt.Errorf("graceful shutdown failed: %w", err)
+		}
+		// Drain the goroutine's final error; ignore ErrServerClosed.
+		if err := <-serverErr; err != nil && err != http.ErrServerClosed {
+			return fmt.Errorf("server error after shutdown: %w", err)
 		}
 	}
 

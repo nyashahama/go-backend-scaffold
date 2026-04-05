@@ -38,9 +38,7 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, rdb *redis.Client, h Han
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes — no JWT required
-		r.Group(func(r chi.Router) {
-			r.Mount("/auth", h.Auth.Routes())
-		})
+		r.Mount("/auth", h.Auth.Routes())
 
 		// Protected routes — JWT required
 		r.Group(func(r chi.Router) {
