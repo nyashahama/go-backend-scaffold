@@ -47,6 +47,8 @@ jobs:
 
       - name: Install tools
         run: go install github.com/pressly/goose/v3/cmd/goose@latest
+        env:
+          GOTOOLCHAIN: local
 
       - name: Run migrations
         env:
@@ -55,11 +57,16 @@ jobs:
 
       - name: Download modules
         run: go mod download
+        env:
+          GOTOOLCHAIN: local
 
       - name: Lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+          skip-cache: true
+        env:
+          GOTOOLCHAIN: local
 
       - name: Unit tests
         run: go test ./internal/... -race -cover
