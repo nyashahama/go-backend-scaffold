@@ -1,8 +1,6 @@
 module github.com/nyashahama/go-backend-scaffold
 
-go 1.24.2
-
-toolchain go1.24.2
+go 1.25.0
 
 require (
 	github.com/go-chi/chi/v5 v5.2.5
