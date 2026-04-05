@@ -53,7 +53,7 @@ func (s *Server) Start() error {
 		defer cancel()
 
 		if err := s.httpServer.Shutdown(ctx); err != nil {
-			s.httpServer.Close()
+			_ = s.httpServer.Close()
 			return fmt.Errorf("graceful shutdown failed: %w", err)
 		}
 		// Drain the goroutine's final error; ignore ErrServerClosed.
