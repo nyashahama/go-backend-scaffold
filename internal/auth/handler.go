@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/nyashahama/go-backend-scaffold/internal/platform/response"
@@ -40,6 +41,7 @@ type changePasswordRequest struct {
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
@@ -51,7 +53,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.service.Register(r.Context(), req.Email, req.Password, req.FullName)
 	if err != nil {
-		if err == ErrEmailExists {
+		if errors.Is(err, ErrEmailExists) {
 			response.Error(w, http.StatusConflict, response.CodeConflict, "email already registered")
 			return
 		}
@@ -62,6 +64,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
@@ -73,7 +76,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.service.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
-		if err == ErrInvalidCredentials {
+		if errors.Is(err, ErrInvalidCredentials) {
 			response.Error(w, http.StatusUnauthorized, response.CodeUnauthorized, "invalid credentials")
 			return
 		}
@@ -84,6 +87,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req refreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
@@ -95,7 +99,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.service.Refresh(r.Context(), req.RefreshToken)
 	if err != nil {
-		if err == ErrInvalidToken {
+		if errors.Is(err, ErrInvalidToken) {
 			response.Error(w, http.StatusUnauthorized, response.CodeUnauthorized, "invalid or expired token")
 			return
 		}
@@ -106,6 +110,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req logoutRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
@@ -153,6 +158,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		Token    string `json:"token"`
 		Password string `json:"password"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
 		return
@@ -162,7 +168,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.ResetPassword(r.Context(), req.Token, req.Password); err != nil {
-		if err == ErrInvalidToken {
+		if errors.Is(err, ErrInvalidToken) {
 			response.Error(w, http.StatusUnauthorized, response.CodeUnauthorized, "invalid or expired reset token")
 			return
 		}
@@ -178,6 +184,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusUnauthorized, response.CodeUnauthorized, "missing auth context")
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req changePasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
@@ -188,10 +195,9 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.ChangePassword(r.Context(), identity.UserID, req.CurrentPassword, req.NewPassword); err != nil {
-		switch err {
-		case ErrWrongPassword:
+		if errors.Is(err, ErrWrongPassword) {
 			response.Error(w, http.StatusUnauthorized, response.CodeUnauthorized, "current password is incorrect")
-		default:
+		} else {
 			response.Error(w, http.StatusInternalServerError, response.CodeInternalError, "failed to update password")
 		}
 		return
