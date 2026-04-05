@@ -30,9 +30,19 @@ func TestGenerateAccessToken_ValidClaims(t *testing.T) {
     }
 }
 
+func TestGenerateAccessToken_EmptySecret(t *testing.T) {
+    _, err := GenerateAccessToken("user-1", "org-1", "admin", "", 15*time.Minute)
+    if err == nil {
+        t.Fatal("expected error for empty secret, got nil")
+    }
+}
+
 func TestValidateAccessToken_WrongSecret(t *testing.T) {
-    tok, _ := GenerateAccessToken("user-1", "org-1", "admin", "secret-a", 15*time.Minute)
-    _, err := ValidateAccessToken(tok, "secret-b")
+    tok, err := GenerateAccessToken("user-1", "org-1", "admin", "secret-a", 15*time.Minute)
+    if err != nil {
+        t.Fatalf("unexpected error generating token: %v", err)
+    }
+    _, err = ValidateAccessToken(tok, "secret-b")
     if err == nil {
         t.Fatal("expected error for wrong secret, got nil")
     }

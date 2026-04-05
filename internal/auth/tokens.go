@@ -28,6 +28,9 @@ type Claims struct {
 
 // GenerateAccessToken creates a signed HS256 JWT for the given user.
 func GenerateAccessToken(userID, orgID, role, secret string, expiry time.Duration) (string, error) {
+	if secret == "" {
+		return "", errors.New("auth: secret must not be empty")
+	}
 	now := time.Now()
 	claims := Claims{
 		OrgID: orgID,
