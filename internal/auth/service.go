@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -123,6 +124,9 @@ func (s *Service) Register(ctx context.Context, email, password, fullName string
 			FullName:     fullName,
 		})
 		if txErr != nil {
+			if isUniqueEmailViolation(txErr) {
+				return ErrEmailExists
+			}
 			return txErr
 		}
 		org, txErr = q.CreateOrg(ctx, "")
@@ -309,7 +313,9 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 		return err
 	}
 
-	s.cache.Del(ctx, key)
+	if err := s.cache.Del(ctx, key).Err(); err != nil {
+		slog.Default().Warn("failed to delete password reset token from cache", "error", err)
+	}
 	return nil
 }
 
