@@ -43,7 +43,6 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	testPool = &database.Pool{Pool: rawPool, Q: dbgen.New(rawPool)}
-	defer rawPool.Close()
 
 	// Redis
 	redisURL := os.Getenv("REDIS_URL")
@@ -56,9 +55,11 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	testRedis = redis.NewClient(opts)
-	defer testRedis.Close()
 
-	os.Exit(m.Run())
+	code := m.Run()
+	rawPool.Close()
+	testRedis.Close()
+	os.Exit(code)
 }
 
 type successEnvelope[T any] struct {
