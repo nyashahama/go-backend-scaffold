@@ -9,16 +9,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// ContextKey is the type for auth-related context keys.
-// Defined here (not in middleware) to avoid import cycles.
-type ContextKey string
-
-const (
-	UserIDKey ContextKey = "user_id"
-	OrgIDKey  ContextKey = "org_id"
-	RoleKey   ContextKey = "role"
-)
-
 // Claims holds JWT payload fields beyond the registered set.
 type Claims struct {
 	OrgID string `json:"org_id"`

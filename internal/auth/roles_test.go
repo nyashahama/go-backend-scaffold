@@ -21,4 +21,7 @@ func TestIsMemberRole(t *testing.T) {
 	if IsMemberRole("admin") {
 		t.Fatal("did not expect admin to be recognized as member role")
 	}
+	if IsMemberRole("") {
+		t.Fatal("did not expect empty string to be recognized as member role")
+	}
 }
