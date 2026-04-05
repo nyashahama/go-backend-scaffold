@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -33,10 +34,14 @@ func Metrics(next http.Handler) http.Handler {
 		start := time.Now()
 		wrapped := &wrappedWriter{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(wrapped, r)
+		route := r.URL.Path
+		if rctx := chi.RouteContext(r.Context()); rctx != nil && rctx.RoutePattern() != "" {
+			route = rctx.RoutePattern()
+		}
 
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(wrapped.statusCode)
-		httpRequestsTotal.WithLabelValues(r.Method, r.URL.Path, status).Inc()
-		httpRequestDuration.WithLabelValues(r.Method, r.URL.Path).Observe(duration)
+		httpRequestsTotal.WithLabelValues(r.Method, route, status).Inc()
+		httpRequestDuration.WithLabelValues(r.Method, route).Observe(duration)
 	})
 }

@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/nyashahama/go-backend-scaffold/internal/auth"
@@ -29,9 +28,6 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
-
-	// Load .env in development (no-op if file doesn't exist or vars already set)
-	_ = godotenv.Load()
 
 	cfg, err := config.Load()
 	if err != nil {
