@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  DATABASE_URL: postgres://user:password@localhost:5432/scaffold?sslmode=disable
+  DATABASE_URL: postgres://user:change-me-local-dev@localhost:5432/scaffold?sslmode=disable
   REDIS_URL: redis://localhost:6379
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
         image: postgres:17-alpine
         env:
           POSTGRES_USER: user
-          POSTGRES_PASSWORD: password
+          POSTGRES_PASSWORD: change-me-local-dev
           POSTGRES_DB: scaffold
         ports:
           - 5432:5432

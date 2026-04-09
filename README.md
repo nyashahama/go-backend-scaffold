@@ -48,13 +48,13 @@ docker compose --profile full up --build
 
 ## Quality Gates
 
-GitHub Actions verifies the startup path promised in this README:
+GitHub Actions verifies core quality gates for this scaffold:
 
 - database migrations apply cleanly against a fresh Postgres service
-- `make test-ci` passes, which runs the repository test sweep plus integration tests with race detection
+- lint passes, and `make test-ci` passes, which runs the repository test sweep plus integration tests with race detection
 - `docker build -t go-backend-scaffold:ci .` succeeds
 
-CI does not currently run `make bootstrap-smoke`; use that locally when you want a clean-path clone-and-boot check.
+CI does not claim to prove the full local startup/bootstrap flow. Use `make bootstrap-smoke` for the clean-path local clone-and-boot check.
 
 ## Auth Endpoints
 
