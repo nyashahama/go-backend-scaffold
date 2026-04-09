@@ -21,31 +21,21 @@ sed -i 's|github.com/nyashahama/go-backend-scaffold|github.com/yourname/my-api|g
 make install-tools
 ```
 
-### 3. Start local services
-
-```bash
-make docker-up
-```
-
-### 4. Configure environment
+### Verified Local Bootstrap
 
 ```bash
 cp .env.example .env
-# Edit .env — at minimum set JWT_SECRET to a real local secret
-```
-
-### 5. Run migrations
-
-```bash
+make docker-up
 make migrate-up
+make test
+make test-integration
+make run
 ```
 
-This uses `DATABASE_URL` from your environment or `.env`.
-
-### 6. Start the server
+If you want to verify the template from a clean path, run:
 
 ```bash
-make run
+make bootstrap-smoke
 ```
 
 The server starts on `http://localhost:8080`.
@@ -87,6 +77,9 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 | `make build` | Compile to `bin/server` |
 | `make test` | Unit tests |
 | `make test-integration` | Integration tests (requires migrated local DB + Redis) |
+| `make test-ci` | `go test ./...` plus integration tests |
+| `make smoke` | Readiness-oriented package smoke tests |
+| `make bootstrap-smoke` | Verified clean-path bootstrap check |
 | `make test-all` | Both |
 | `make lint` | golangci-lint |
 | `make fmt` | gofmt + goimports |
@@ -99,7 +92,7 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 
 ## Environment
 
-Copy `.env.example` to `.env` and update values as needed.
+Copy `.env.example` to `.env` and update values as needed. `JWT_SECRET` must not remain the example placeholder.
 
 | Variable | Purpose |
 |----------|---------|
