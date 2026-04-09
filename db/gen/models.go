@@ -30,6 +30,7 @@ type RefreshToken struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	Revoked   bool      `json:"revoked"`
 	CreatedAt time.Time `json:"created_at"`
+	OrgID     uuid.UUID `json:"org_id"`
 }
 
 type User struct {
@@ -39,4 +40,5 @@ type User struct {
 	FullName     string    `json:"full_name"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	TokenVersion int32     `json:"token_version"`
 }

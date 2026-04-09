@@ -13,7 +13,7 @@ import (
 // mockService is a test double for Servicer.
 type mockService struct {
 	registerFn       func(ctx context.Context, email, password, fullName string) (*AuthResponse, error)
-	loginFn          func(ctx context.Context, email, password string) (*AuthResponse, error)
+	loginFn          func(ctx context.Context, email, password, orgID string) (*AuthResponse, error)
 	refreshFn        func(ctx context.Context, refreshToken string) (*RefreshResponse, error)
 	logoutFn         func(ctx context.Context, refreshToken string) error
 	meFn             func(ctx context.Context, userID, orgID string) (*MeResponse, error)
@@ -28,11 +28,11 @@ func (m *mockService) Register(ctx context.Context, email, password, fullName st
 	}
 	return m.registerFn(ctx, email, password, fullName)
 }
-func (m *mockService) Login(ctx context.Context, email, password string) (*AuthResponse, error) {
+func (m *mockService) Login(ctx context.Context, email, password, orgID string) (*AuthResponse, error) {
 	if m.loginFn == nil {
 		return nil, nil
 	}
-	return m.loginFn(ctx, email, password)
+	return m.loginFn(ctx, email, password, orgID)
 }
 func (m *mockService) Refresh(ctx context.Context, refreshToken string) (*RefreshResponse, error) {
 	if m.refreshFn == nil {
@@ -137,7 +137,7 @@ func TestRegister_Success(t *testing.T) {
 
 func TestLogin_InvalidCredentials(t *testing.T) {
 	svc := &mockService{
-		loginFn: func(_ context.Context, _, _ string) (*AuthResponse, error) {
+		loginFn: func(_ context.Context, _, _, _ string) (*AuthResponse, error) {
 			return nil, ErrInvalidCredentials
 		},
 	}
@@ -153,7 +153,7 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 
 func TestLogin_Success(t *testing.T) {
 	svc := &mockService{
-		loginFn: func(_ context.Context, _, _ string) (*AuthResponse, error) {
+		loginFn: func(_ context.Context, _, _, _ string) (*AuthResponse, error) {
 			return &AuthResponse{AccessToken: "tok", RefreshToken: "rt", ExpiresIn: 900}, nil
 		},
 	}

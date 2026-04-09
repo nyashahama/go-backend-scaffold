@@ -1,10 +1,10 @@
 package middleware
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -20,21 +20,21 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Han
 				return
 			}
 
-			ip, _, err := net.SplitHostPort(r.RemoteAddr)
-			if err != nil {
-				ip = r.RemoteAddr
-			}
+			ip := clientIP(r)
 			key := fmt.Sprintf("ratelimit:%s", ip)
-			ctx := context.Background()
+			ctx := r.Context()
 
 			count, err := rdb.Incr(ctx, key).Result()
 			if err != nil {
-				next.ServeHTTP(w, r)
+				response.Error(w, http.StatusServiceUnavailable, response.CodeInternalError, "rate limiter unavailable")
 				return
 			}
 
 			if count == 1 {
-				rdb.Expire(ctx, key, window)
+				if err := rdb.Expire(ctx, key, window).Err(); err != nil {
+					response.Error(w, http.StatusServiceUnavailable, response.CodeInternalError, "rate limiter unavailable")
+					return
+				}
 			}
 
 			if count > int64(limit) {
@@ -45,4 +45,41 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Han
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+
+	ip := net.ParseIP(host)
+	if ip != nil && (ip.IsLoopback() || ip.IsPrivate()) {
+		if forwarded := firstForwardedIP(r.Header.Get("X-Forwarded-For")); forwarded != "" {
+			return forwarded
+		}
+		if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" && net.ParseIP(realIP) != nil {
+			return realIP
+		}
+	}
+
+	return host
+}
+
+func firstForwardedIP(xff string) string {
+	if xff == "" {
+		return ""
+	}
+
+	for _, part := range strings.Split(xff, ",") {
+		candidate := strings.TrimSpace(part)
+		if candidate == "" {
+			continue
+		}
+		if net.ParseIP(candidate) != nil {
+			return candidate
+		}
+	}
+
+	return ""
 }
