@@ -25,6 +25,7 @@ make install-tools
 
 ```bash
 cp .env.example .env
+# Replace JWT_SECRET before running the server
 make docker-up
 make migrate-up
 make test

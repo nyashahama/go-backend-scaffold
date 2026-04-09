@@ -25,8 +25,7 @@ test:
 test-integration:
 	go test ./tests/integration/... -v -race -tags=integration
 
-test-ci:
-	go test ./...
+test-ci: test
 	go test ./tests/integration/... -tags=integration
 
 smoke:
