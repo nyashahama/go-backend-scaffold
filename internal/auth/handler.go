@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/nyashahama/go-backend-scaffold/internal/platform/response"
@@ -44,7 +45,7 @@ type changePasswordRequest struct {
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req registerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
 		return
 	}
@@ -52,6 +53,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "email, password, and full_name are required")
 		return
 	}
+	normalizedEmail, err := normalizeEmail(req.Email)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid email address")
+		return
+	}
+	req.Email = normalizedEmail
 	res, err := h.service.Register(r.Context(), req.Email, req.Password, req.FullName)
 	if err != nil {
 		if errors.Is(err, ErrInvalidEmail) {
@@ -75,7 +82,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
 		return
 	}
@@ -83,6 +90,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "email and password are required")
 		return
 	}
+	normalizedEmail, err := normalizeEmail(req.Email)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid email address")
+		return
+	}
+	req.Email = normalizedEmail
 	res, err := h.service.Login(r.Context(), req.Email, req.Password, req.OrgID)
 	if err != nil {
 		if errors.Is(err, ErrOrgSelectionRequired) {
@@ -106,7 +119,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req refreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
 		return
 	}
@@ -129,7 +142,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req logoutRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
 		return
 	}
@@ -161,8 +174,15 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		Email string `json:"email"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
 		req.Email = ""
+	}
+	if req.Email != "" {
+		if normalized, err := normalizeEmail(req.Email); err == nil {
+			req.Email = normalized
+		} else {
+			req.Email = ""
+		}
 	}
 	// Always 200 — prevents email enumeration
 	_ = h.service.ForgotPassword(r.Context(), req.Email)
@@ -177,7 +197,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
 		return
 	}
@@ -208,7 +228,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req changePasswordRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
 		return
 	}
@@ -227,4 +247,19 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.NoContent(w)
+}
+
+func decodeJSONStrict(r io.Reader, dst any) error {
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		return errors.New("request body must contain a single JSON object")
+	}
+
+	return nil
 }

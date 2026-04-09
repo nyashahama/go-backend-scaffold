@@ -165,7 +165,10 @@ func (s *Service) Login(ctx context.Context, email, password, orgID string) (*Au
 
 	user, err := s.db.Q.GetUserByEmail(ctx, email)
 	if err != nil {
-		return nil, ErrInvalidCredentials
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidCredentials
+		}
+		return nil, err
 	}
 
 	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
@@ -173,7 +176,10 @@ func (s *Service) Login(ctx context.Context, email, password, orgID string) (*Au
 	}
 
 	memberships, err := s.db.Q.ListOrgMembershipsByUser(ctx, user.ID)
-	if err != nil || len(memberships) == 0 {
+	if err != nil {
+		return nil, err
+	}
+	if len(memberships) == 0 {
 		return nil, ErrInvalidCredentials
 	}
 

@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -14,9 +15,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	dbgen "github.com/nyashahama/go-backend-scaffold/db/gen"
 	"github.com/nyashahama/go-backend-scaffold/internal/auth"
 	"github.com/nyashahama/go-backend-scaffold/internal/platform/database"
-	dbgen "github.com/nyashahama/go-backend-scaffold/db/gen"
 )
 
 var (
@@ -42,7 +43,15 @@ func TestMain(m *testing.M) {
 		testLog.Error("failed to connect to test database", "error", err)
 		os.Exit(1)
 	}
+	if err := rawPool.Ping(ctx); err != nil {
+		testLog.Error("failed to ping test database", "error", err, "database_url", dbURL)
+		os.Exit(1)
+	}
 	testPool = &database.Pool{Pool: rawPool, Q: dbgen.New(rawPool)}
+	if err := requireAuthSchema(ctx, rawPool); err != nil {
+		testLog.Error("integration database is missing required schema", "error", err)
+		os.Exit(1)
+	}
 
 	// Redis
 	redisURL := os.Getenv("REDIS_URL")
@@ -55,6 +64,10 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	testRedis = redis.NewClient(opts)
+	if err := testRedis.Ping(ctx).Err(); err != nil {
+		testLog.Error("failed to ping test redis", "error", err, "redis_url", redisURL)
+		os.Exit(1)
+	}
 
 	code := m.Run()
 	rawPool.Close()
@@ -88,4 +101,15 @@ func withAuthContext(r *http.Request, accessToken, jwtSecret string) *http.Reque
 		panic("withAuthContext: invalid token: " + err.Error())
 	}
 	return r.WithContext(auth.ContextWithClaims(r.Context(), claims))
+}
+
+func requireAuthSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	var usersTable *string
+	if err := pool.QueryRow(ctx, "select to_regclass('public.users')::text").Scan(&usersTable); err != nil {
+		return err
+	}
+	if usersTable == nil || *usersTable == "" {
+		return errors.New("users table not found; run migrations before integration tests")
+	}
+	return nil
 }

@@ -12,29 +12,28 @@ import (
 	"github.com/nyashahama/go-backend-scaffold/internal/platform/response"
 )
 
+var rateLimitScript = redis.NewScript(`
+local count = redis.call("INCR", KEYS[1])
+if count == 1 then
+  redis.call("PEXPIRE", KEYS[1], ARGV[1])
+end
+return count
+`)
+
 func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if rdb == nil {
+			if shouldSkipRateLimit(r.URL.Path) || rdb == nil {
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			ip := clientIP(r)
 			key := fmt.Sprintf("ratelimit:%s", ip)
-			ctx := r.Context()
-
-			count, err := rdb.Incr(ctx, key).Result()
+			count, err := rateLimitScript.Run(r.Context(), rdb, []string{key}, window.Milliseconds()).Int64()
 			if err != nil {
 				response.Error(w, http.StatusServiceUnavailable, response.CodeInternalError, "rate limiter unavailable")
 				return
-			}
-
-			if count == 1 {
-				if err := rdb.Expire(ctx, key, window).Err(); err != nil {
-					response.Error(w, http.StatusServiceUnavailable, response.CodeInternalError, "rate limiter unavailable")
-					return
-				}
 			}
 
 			if count > int64(limit) {
@@ -82,4 +81,13 @@ func firstForwardedIP(xff string) string {
 	}
 
 	return ""
+}
+
+func shouldSkipRateLimit(path string) bool {
+	switch path {
+	case "/healthz", "/readyz", "/metrics":
+		return true
+	default:
+		return false
+	}
 }

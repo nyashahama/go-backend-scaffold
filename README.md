@@ -31,7 +31,7 @@ make docker-up
 
 ```bash
 cp .env.example .env
-# Edit .env — at minimum set JWT_SECRET
+# Edit .env — at minimum set JWT_SECRET to a real local secret
 ```
 
 ### 5. Run migrations
@@ -40,6 +40,8 @@ cp .env.example .env
 make migrate-up
 ```
 
+This uses `DATABASE_URL` from your environment or `.env`.
+
 ### 6. Start the server
 
 ```bash
@@ -47,6 +49,12 @@ make run
 ```
 
 The server starts on `http://localhost:8080`.
+
+For a full containerized stack, including the backend container, run:
+
+```bash
+docker compose --profile full up --build
+```
 
 ## Auth Endpoints
 
@@ -78,7 +86,7 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 | `make run` | Start server |
 | `make build` | Compile to `bin/server` |
 | `make test` | Unit tests |
-| `make test-integration` | Integration tests (requires local DB + Redis) |
+| `make test-integration` | Integration tests (requires migrated local DB + Redis) |
 | `make test-all` | Both |
 | `make lint` | golangci-lint |
 | `make fmt` | gofmt + goimports |
@@ -88,6 +96,21 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 | `make migrate-create name=foo` | Create new migration |
 | `make docker-up` | Start postgres + redis |
 | `make install-tools` | Install sqlc, goose, golangci-lint, goimports |
+
+## Environment
+
+Copy `.env.example` to `.env` and update values as needed.
+
+| Variable | Purpose |
+|----------|---------|
+| `PORT` | HTTP port for the API server |
+| `DATABASE_URL` | Postgres connection string |
+| `REDIS_URL` | Redis connection string |
+| `JWT_SECRET` | HMAC signing key for access tokens |
+| `JWT_EXPIRY` | Access-token lifetime, parsed by Go `time.ParseDuration` |
+| `REFRESH_EXPIRY` | Refresh-token lifetime |
+| `APP_BASE_URL` | Base URL used in password-reset links |
+| `ALLOWED_ORIGINS` | Comma-separated browser origins allowed by CORS |
 
 ## Release
 
