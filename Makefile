@@ -1,5 +1,5 @@
 .PHONY: run build clean test test-integration test-all test-ci smoke \
-        bootstrap-smoke lint fmt generate migrate-up migrate-down \
+        bootstrap-smoke ready-for-adopters lint fmt generate migrate-up migrate-down \
         migrate-create migrate-status docker-up docker-down seed install-tools
 
 # ============================================================================
@@ -34,6 +34,12 @@ smoke:
 
 bootstrap-smoke:
 	bash scripts/ci/bootstrap-smoke.sh
+
+ready-for-adopters:
+	$(MAKE) lint
+	go test ./... -race
+	$(MAKE) bootstrap-smoke
+	docker build -t go-backend-scaffold:ready .
 
 test-all: test test-integration
 

@@ -38,7 +38,16 @@ If you want to verify the template from a clean path, run:
 make bootstrap-smoke
 ```
 
+When you are deciding whether this scaffold is ready to hand to a random startup adopter, run:
+
+```bash
+make ready-for-adopters
+```
+
+This assumes the local toolchain is current enough to lint and test the module, typically after `make install-tools`.
+
 Before a real deployment, complete the [adoption checklist](docs/adoption-checklist.md).
+Read the explicit release gate definition in [docs/startup-readiness.md](docs/startup-readiness.md).
 
 The server starts on `http://localhost:8080`.
 
@@ -56,7 +65,7 @@ GitHub Actions verifies core quality gates for this scaffold:
 - lint passes, and `make test-ci` passes, which runs the repository test sweep plus integration tests with race detection
 - `docker build -t go-backend-scaffold:ci .` succeeds
 
-CI does not claim to prove the full local startup/bootstrap flow. Use `make bootstrap-smoke` for the clean-path local clone-and-boot check.
+CI does not claim to prove the full local startup/bootstrap flow. `make ready-for-adopters` is the final local release gate for this scaffold: it runs lint, package tests with `-race`, a clean bootstrap smoke run, and a Docker build. It does not replace the [adoption checklist](docs/adoption-checklist.md) or startup-specific production hardening. See [docs/startup-readiness.md](docs/startup-readiness.md) for the exact standard.
 
 ## Auth Endpoints
 
@@ -92,6 +101,7 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 | `make test-ci` | CI test gate: full package sweep plus integration tests, both with `-race` |
 | `make smoke` | Focused server/auth package check |
 | `make bootstrap-smoke` | Verified clean-path bootstrap check |
+| `make ready-for-adopters` | Final local release gate for handing the scaffold to adopters |
 | `make test-all` | Both |
 | `make lint` | golangci-lint |
 | `make fmt` | gofmt + goimports |
