@@ -1,18 +1,17 @@
 # go-backend-scaffold
 
-A production-ready Go backend scaffold. Clone it, rename the module, and build your next API.
+A production-ready Go backend scaffold. Clone it, initialize the module path safely, and build your next API.
 
 **Stack:** chi · pgx/v5 · sqlc · goose · JWT · Redis · Prometheus · slog · Docker · GitHub Actions
 
 ## Quickstart
 
-### 1. Clone and rename
+### 1. Clone and initialize
 
 ```bash
 git clone https://github.com/nyashahama/go-backend-scaffold.git my-api
 cd my-api
-find . -type f -name "*.go" -exec sed -i 's|github.com/nyashahama/go-backend-scaffold|github.com/yourname/my-api|g' {} +
-sed -i 's|github.com/nyashahama/go-backend-scaffold|github.com/yourname/my-api|g' go.mod
+bash scripts/init-template.sh github.com/yourname/my-api
 ```
 
 ### 2. Install tools
@@ -37,6 +36,8 @@ If you want to verify the template from a clean path, run:
 ```bash
 make bootstrap-smoke
 ```
+
+Before a real deployment, complete the [adoption checklist](docs/adoption-checklist.md).
 
 The server starts on `http://localhost:8080`.
 
