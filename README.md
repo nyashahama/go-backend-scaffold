@@ -78,8 +78,8 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 | `make build` | Compile to `bin/server` |
 | `make test` | Unit tests |
 | `make test-integration` | Integration tests (requires migrated local DB + Redis) |
-| `make test-ci` | `go test ./...` plus integration tests |
-| `make smoke` | Readiness-oriented package smoke tests |
+| `make test-ci` | Full package test sweep plus integration tests |
+| `make smoke` | Focused server/auth package check |
 | `make bootstrap-smoke` | Verified clean-path bootstrap check |
 | `make test-all` | Both |
 | `make lint` | golangci-lint |
