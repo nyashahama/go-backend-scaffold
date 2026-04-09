@@ -65,7 +65,7 @@ GitHub Actions verifies core quality gates for this scaffold:
 - lint passes, and `make test-ci` passes, which runs the repository test sweep plus integration tests with race detection
 - `docker build -t go-backend-scaffold:ci .` succeeds
 
-CI does not claim to prove the full local startup/bootstrap flow. `make ready-for-adopters` is the final local release gate for this scaffold: it runs lint, package tests with `-race`, a clean bootstrap smoke run, and a Docker build. It does not replace the [adoption checklist](docs/adoption-checklist.md) or startup-specific production hardening. See [docs/startup-readiness.md](docs/startup-readiness.md) for the exact standard.
+CI does not claim to prove the full local startup/bootstrap flow. `make ready-for-adopters` is the final local release gate for this scaffold: it runs `make lint`, `make test-ci`, `make bootstrap-smoke`, and a Docker build. It does not replace the [adoption checklist](docs/adoption-checklist.md) or startup-specific production hardening. See [docs/startup-readiness.md](docs/startup-readiness.md) for the exact standard.
 
 ## Auth Endpoints
 
@@ -101,7 +101,7 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 | `make test-ci` | CI test gate: full package sweep plus integration tests, both with `-race` |
 | `make smoke` | Focused server/auth package check |
 | `make bootstrap-smoke` | Verified clean-path bootstrap check |
-| `make ready-for-adopters` | Final local release gate for handing the scaffold to adopters |
+| `make ready-for-adopters` | Final local release gate: lint, `test-ci`, bootstrap smoke, and Docker build |
 | `make test-all` | Both |
 | `make lint` | golangci-lint |
 | `make fmt` | gofmt + goimports |

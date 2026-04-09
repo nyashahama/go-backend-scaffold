@@ -37,7 +37,7 @@ bootstrap-smoke:
 
 ready-for-adopters:
 	$(MAKE) lint
-	go test ./... -race
+	$(MAKE) test-ci
 	$(MAKE) bootstrap-smoke
 	docker build -t go-backend-scaffold:ready .
 
