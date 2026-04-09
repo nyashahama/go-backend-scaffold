@@ -91,6 +91,39 @@ func TestRegister_BadJSON(t *testing.T) {
 	}
 }
 
+func TestRegister_RejectsUnknownFields(t *testing.T) {
+	h := NewHandler(&mockService{})
+	req := httptest.NewRequest(http.MethodPost, "/register", jsonBody(t, map[string]string{
+		"email": "a@b.com", "password": "pass", "full_name": "A B", "unexpected": "x",
+	}))
+	w := httptest.NewRecorder()
+	h.Register(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestRegister_NormalizesEmailBeforeCallingService(t *testing.T) {
+	var gotEmail string
+	svc := &mockService{
+		registerFn: func(_ context.Context, email, _, _ string) (*AuthResponse, error) {
+			gotEmail = email
+			return &AuthResponse{AccessToken: "tok", RefreshToken: "rt", ExpiresIn: 900}, nil
+		},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/register", jsonBody(t, map[string]string{
+		"email": "  A.User@Example.COM  ", "password": "pass", "full_name": "A B",
+	}))
+	w := httptest.NewRecorder()
+	NewHandler(svc).Register(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", w.Code)
+	}
+	if gotEmail != "a.user@example.com" {
+		t.Errorf("email = %q, want %q", gotEmail, "a.user@example.com")
+	}
+}
+
 func TestRegister_MissingFields(t *testing.T) {
 	h := NewHandler(&mockService{})
 	req := httptest.NewRequest(http.MethodPost, "/register", jsonBody(t, map[string]string{"email": "a@b.com"}))
@@ -148,6 +181,37 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 	NewHandler(svc).Login(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", w.Code)
+	}
+}
+
+func TestLogin_RejectsTrailingJSON(t *testing.T) {
+	h := NewHandler(&mockService{})
+	req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewBufferString(`{"email":"a@b.com","password":"pw"}{"extra":true}`))
+	w := httptest.NewRecorder()
+	h.Login(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestLogin_NormalizesEmailBeforeCallingService(t *testing.T) {
+	var gotEmail string
+	svc := &mockService{
+		loginFn: func(_ context.Context, email, _ string) (*AuthResponse, error) {
+			gotEmail = email
+			return &AuthResponse{AccessToken: "tok", RefreshToken: "rt", ExpiresIn: 900}, nil
+		},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/login", jsonBody(t, map[string]string{
+		"email": "  A.User@Example.COM  ", "password": "correct",
+	}))
+	w := httptest.NewRecorder()
+	NewHandler(svc).Login(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if gotEmail != "a.user@example.com" {
+		t.Errorf("email = %q, want %q", gotEmail, "a.user@example.com")
 	}
 }
 

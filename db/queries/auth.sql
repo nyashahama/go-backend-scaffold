@@ -48,12 +48,13 @@ INSERT INTO refresh_tokens (token, user_id, expires_at)
 VALUES ($1, $2, $3)
 RETURNING *;
 
--- name: GetRefreshToken :one
-SELECT * FROM refresh_tokens
+-- name: ConsumeRefreshToken :one
+UPDATE refresh_tokens
+SET revoked = TRUE
 WHERE token = $1
   AND revoked = FALSE
   AND expires_at > NOW()
-LIMIT 1;
+RETURNING *;
 
 -- name: RevokeRefreshToken :exec
 UPDATE refresh_tokens

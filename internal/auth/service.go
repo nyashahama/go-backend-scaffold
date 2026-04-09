@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -100,6 +99,8 @@ func NewService(
 }
 
 func (s *Service) Register(ctx context.Context, email, password, fullName string) (*AuthResponse, error) {
+	email = normalizeEmail(email)
+
 	_, err := s.db.Q.GetUserByEmail(ctx, email)
 	if err == nil {
 		return nil, ErrEmailExists
@@ -148,9 +149,14 @@ func (s *Service) Register(ctx context.Context, email, password, fullName string
 }
 
 func (s *Service) Login(ctx context.Context, email, password string) (*AuthResponse, error) {
+	email = normalizeEmail(email)
+
 	user, err := s.db.Q.GetUserByEmail(ctx, email)
 	if err != nil {
-		return nil, ErrInvalidCredentials
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidCredentials
+		}
+		return nil, err
 	}
 
 	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
@@ -158,7 +164,10 @@ func (s *Service) Login(ctx context.Context, email, password string) (*AuthRespo
 	}
 
 	memberships, err := s.db.Q.ListOrgMembershipsByUser(ctx, user.ID)
-	if err != nil || len(memberships) == 0 {
+	if err != nil {
+		return nil, err
+	}
+	if len(memberships) == 0 {
 		return nil, ErrInvalidCredentials
 	}
 
@@ -167,32 +176,38 @@ func (s *Service) Login(ctx context.Context, email, password string) (*AuthRespo
 }
 
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (*RefreshResponse, error) {
-	rt, err := s.db.Q.GetRefreshToken(ctx, refreshToken)
-	if err != nil {
-		return nil, ErrInvalidToken
-	}
-
-	user, err := s.db.Q.GetUserByID(ctx, rt.UserID)
-	if err != nil {
-		return nil, ErrInvalidToken
-	}
-
-	memberships, err := s.db.Q.ListOrgMembershipsByUser(ctx, user.ID)
-	if err != nil || len(memberships) == 0 {
-		return nil, ErrInvalidToken
-	}
-	m := memberships[0]
-
 	newRefreshToken, err := GenerateRefreshToken()
 	if err != nil {
 		return nil, err
 	}
 
+	var user dbgen.User
+	var membership dbgen.OrgMembership
+
 	err = database.WithTxQueries(ctx, s.db, func(q *dbgen.Queries) error {
-		if txErr := q.RevokeRefreshToken(ctx, refreshToken); txErr != nil {
+		rt, txErr := q.ConsumeRefreshToken(ctx, refreshToken)
+		if txErr != nil {
+			if errors.Is(txErr, pgx.ErrNoRows) {
+				return ErrInvalidToken
+			}
 			return txErr
 		}
-		_, txErr := q.CreateRefreshToken(ctx, dbgen.CreateRefreshTokenParams{
+
+		user, txErr = q.GetUserByID(ctx, rt.UserID)
+		if txErr != nil {
+			return txErr
+		}
+
+		memberships, txErr := q.ListOrgMembershipsByUser(ctx, user.ID)
+		if txErr != nil {
+			return txErr
+		}
+		if len(memberships) == 0 {
+			return ErrInvalidToken
+		}
+		membership = memberships[0]
+
+		_, txErr = q.CreateRefreshToken(ctx, dbgen.CreateRefreshTokenParams{
 			Token:     newRefreshToken,
 			UserID:    user.ID,
 			ExpiresAt: time.Now().Add(s.refreshExpiry),
@@ -203,7 +218,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*RefreshRes
 		return nil, err
 	}
 
-	accessToken, err := GenerateAccessToken(user.ID.String(), m.OrgID.String(), m.Role, s.jwtSecret, s.jwtExpiry)
+	accessToken, err := GenerateAccessToken(user.ID.String(), membership.OrgID.String(), membership.Role, s.jwtSecret, s.jwtExpiry)
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +271,8 @@ func (s *Service) Me(ctx context.Context, userID, orgID string) (*MeResponse, er
 }
 
 func (s *Service) ForgotPassword(ctx context.Context, email string) error {
+	email = normalizeEmail(email)
+
 	user, err := s.db.Q.GetUserByEmail(ctx, email)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil // silent — prevents email enumeration
@@ -285,7 +302,7 @@ func (s *Service) ForgotPassword(ctx context.Context, email string) error {
 
 func (s *Service) ResetPassword(ctx context.Context, token, password string) error {
 	key := "pwreset:" + token
-	userIDStr, err := s.cache.Get(ctx, key).Result()
+	userIDStr, err := s.cache.GetDel(ctx, key).Result()
 	if err != nil {
 		return ErrInvalidToken
 	}
@@ -311,10 +328,6 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 	})
 	if err != nil {
 		return err
-	}
-
-	if err := s.cache.Del(ctx, key).Err(); err != nil {
-		slog.Default().Warn("failed to delete password reset token from cache", "error", err)
 	}
 	return nil
 }

@@ -138,16 +138,17 @@ func (q *Queries) GetOrgMembershipByUser(ctx context.Context, arg GetOrgMembersh
 	return i, err
 }
 
-const getRefreshToken = `-- name: GetRefreshToken :one
-SELECT token, user_id, expires_at, revoked, created_at FROM refresh_tokens
+const consumeRefreshToken = `-- name: ConsumeRefreshToken :one
+UPDATE refresh_tokens
+SET revoked = TRUE
 WHERE token = $1
   AND revoked = FALSE
   AND expires_at > NOW()
-LIMIT 1
+RETURNING token, user_id, expires_at, revoked, created_at
 `
 
-func (q *Queries) GetRefreshToken(ctx context.Context, token string) (RefreshToken, error) {
-	row := q.db.QueryRow(ctx, getRefreshToken, token)
+func (q *Queries) ConsumeRefreshToken(ctx context.Context, token string) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, consumeRefreshToken, token)
 	var i RefreshToken
 	err := row.Scan(
 		&i.Token,
