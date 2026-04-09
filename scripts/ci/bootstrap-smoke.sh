@@ -8,16 +8,36 @@ SMOKE_ENV_FILE=".env.bootstrap"
 SMOKE_COMPOSE_PROJECT="go-backend-scaffold-smoke-$(date +%s)-$$"
 
 find_free_port() {
-  local port
-  for port in "$@"; do
-    if ! ss -ltn "( sport = :$port )" | grep -q ":$port"; then
-      printf '%s\n' "$port"
-      return 0
-    fi
-  done
+  local helper
+  local status
+  helper="$(mktemp "${TMPDIR:-/tmp}/bootstrap-port-check.XXXXXX.go")"
+  cat >"$helper" <<'EOF'
+package main
 
-  echo "failed to find a free port" >&2
-  return 1
+import (
+	"fmt"
+	"net"
+	"os"
+)
+
+func main() {
+	for _, port := range os.Args[1:] {
+		ln, err := net.Listen("tcp", "127.0.0.1:"+port)
+		if err != nil {
+			continue
+		}
+		_ = ln.Close()
+		fmt.Println(port)
+		return
+	}
+
+	fmt.Fprintln(os.Stderr, "failed to find a free port")
+	os.Exit(1)
+}
+EOF
+  go run "$helper" "$@" || status=$?
+  rm -f "$helper"
+  return "${status:-0}"
 }
 
 POSTGRES_PORT="${POSTGRES_PORT:-$(find_free_port 15432 25432 35432 45432)}"
