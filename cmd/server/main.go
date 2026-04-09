@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 
@@ -55,9 +57,18 @@ func main() {
 	defer func() { _ = rdb.Close() }()
 	logger.Info("redis connected")
 
-	// Auth service — swap &notification.NoopSender{} for a real Sender per project
+	sender, err := buildNotificationSender(cfg)
+	if err != nil {
+		logger.Error("invalid runtime configuration", "error", err)
+		os.Exit(1)
+	}
+	if err := validateRuntimeConfig(cfg, sender); err != nil {
+		logger.Error("invalid runtime configuration", "error", err)
+		os.Exit(1)
+	}
+
 	authService := auth.NewService(
-		db, rdb, &notification.NoopSender{},
+		db, rdb, sender,
 		cfg.JWTSecret, cfg.AppBaseURL,
 		cfg.JWTExpiry, cfg.RefreshExpiry,
 	)
@@ -67,7 +78,7 @@ func main() {
 		Auth:   auth.NewHandler(authService),
 	}
 
-	router := server.NewRouter(cfg, logger, rdb, handlers)
+	router := server.NewRouter(cfg, logger, db.Q, rdb, handlers)
 	srv := server.New(router, cfg.Port, logger)
 
 	if err := srv.Start(); err != nil {
@@ -76,4 +87,46 @@ func main() {
 	}
 
 	logger.Info("server stopped")
+}
+
+func validateRuntimeConfig(cfg *config.Config, sender notification.Sender) error {
+	if cfg == nil {
+		return errors.New("config is required")
+	}
+
+	if !strings.EqualFold(cfg.Env, "production") {
+		return nil
+	}
+
+	if cfg.AppBaseURL == "" {
+		return errors.New("APP_BASE_URL is required in production")
+	}
+
+	if cfg.ResendAPIKey == "" || cfg.EmailFrom == "" || cfg.EmailFromName == "" {
+		return errors.New("production requires RESEND_API_KEY, EMAIL_FROM, and EMAIL_FROM_NAME")
+	}
+
+	if _, ok := sender.(*notification.NoopSender); ok {
+		return errors.New("production requires a real notification sender")
+	}
+
+	return nil
+}
+
+func buildNotificationSender(cfg *config.Config) (notification.Sender, error) {
+	if cfg == nil {
+		return nil, errors.New("config is required")
+	}
+
+	hasAnyResendConfig := cfg.ResendAPIKey != "" || cfg.EmailFrom != "" || cfg.EmailFromName != ""
+	hasFullResendConfig := cfg.ResendAPIKey != "" && cfg.EmailFrom != "" && cfg.EmailFromName != ""
+
+	if !hasAnyResendConfig {
+		return &notification.NoopSender{}, nil
+	}
+	if !hasFullResendConfig {
+		return nil, errors.New("RESEND_API_KEY, EMAIL_FROM, and EMAIL_FROM_NAME must be set together")
+	}
+
+	return notification.NewResendSender(cfg.ResendAPIKey, cfg.EmailFrom, cfg.EmailFromName)
 }

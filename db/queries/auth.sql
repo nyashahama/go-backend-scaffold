@@ -5,7 +5,7 @@ RETURNING *;
 
 -- name: GetUserByEmail :one
 SELECT * FROM users
-WHERE email = $1
+WHERE LOWER(email) = LOWER($1)
 LIMIT 1;
 
 -- name: GetUserByID :one
@@ -44,16 +44,17 @@ WHERE user_id = $1
 ORDER BY created_at;
 
 -- name: CreateRefreshToken :one
-INSERT INTO refresh_tokens (token, user_id, expires_at)
-VALUES ($1, $2, $3)
+INSERT INTO refresh_tokens (token, user_id, org_id, expires_at)
+VALUES ($1, $2, $3, $4)
 RETURNING *;
 
--- name: GetRefreshToken :one
-SELECT * FROM refresh_tokens
+-- name: ConsumeRefreshToken :one
+UPDATE refresh_tokens
+SET revoked = TRUE
 WHERE token = $1
   AND revoked = FALSE
   AND expires_at > NOW()
-LIMIT 1;
+RETURNING *;
 
 -- name: RevokeRefreshToken :exec
 UPDATE refresh_tokens
@@ -64,3 +65,8 @@ WHERE token = $1;
 UPDATE refresh_tokens
 SET revoked = TRUE
 WHERE user_id = $1;
+
+-- name: IncrementUserTokenVersion :exec
+UPDATE users
+SET token_version = token_version + 1
+WHERE id = $1;

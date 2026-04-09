@@ -12,6 +12,29 @@ import (
 	"github.com/google/uuid"
 )
 
+const consumeRefreshToken = `-- name: ConsumeRefreshToken :one
+UPDATE refresh_tokens
+SET revoked = TRUE
+WHERE token = $1
+  AND revoked = FALSE
+  AND expires_at > NOW()
+RETURNING token, user_id, expires_at, revoked, created_at, org_id
+`
+
+func (q *Queries) ConsumeRefreshToken(ctx context.Context, token string) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, consumeRefreshToken, token)
+	var i RefreshToken
+	err := row.Scan(
+		&i.Token,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.Revoked,
+		&i.CreatedAt,
+		&i.OrgID,
+	)
+	return i, err
+}
+
 const createOrg = `-- name: CreateOrg :one
 INSERT INTO orgs (name)
 VALUES ($1)
@@ -51,19 +74,25 @@ func (q *Queries) CreateOrgMembership(ctx context.Context, arg CreateOrgMembersh
 }
 
 const createRefreshToken = `-- name: CreateRefreshToken :one
-INSERT INTO refresh_tokens (token, user_id, expires_at)
-VALUES ($1, $2, $3)
-RETURNING token, user_id, expires_at, revoked, created_at
+INSERT INTO refresh_tokens (token, user_id, org_id, expires_at)
+VALUES ($1, $2, $3, $4)
+RETURNING token, user_id, expires_at, revoked, created_at, org_id
 `
 
 type CreateRefreshTokenParams struct {
 	Token     string    `json:"token"`
 	UserID    uuid.UUID `json:"user_id"`
+	OrgID     uuid.UUID `json:"org_id"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
 func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error) {
-	row := q.db.QueryRow(ctx, createRefreshToken, arg.Token, arg.UserID, arg.ExpiresAt)
+	row := q.db.QueryRow(ctx, createRefreshToken,
+		arg.Token,
+		arg.UserID,
+		arg.OrgID,
+		arg.ExpiresAt,
+	)
 	var i RefreshToken
 	err := row.Scan(
 		&i.Token,
@@ -71,6 +100,7 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 		&i.ExpiresAt,
 		&i.Revoked,
 		&i.CreatedAt,
+		&i.OrgID,
 	)
 	return i, err
 }
@@ -78,7 +108,7 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, full_name)
 VALUES ($1, $2, $3)
-RETURNING id, email, password_hash, full_name, created_at, updated_at
+RETURNING id, email, password_hash, full_name, created_at, updated_at, token_version
 `
 
 type CreateUserParams struct {
@@ -97,6 +127,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.FullName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
@@ -138,35 +169,14 @@ func (q *Queries) GetOrgMembershipByUser(ctx context.Context, arg GetOrgMembersh
 	return i, err
 }
 
-const getRefreshToken = `-- name: GetRefreshToken :one
-SELECT token, user_id, expires_at, revoked, created_at FROM refresh_tokens
-WHERE token = $1
-  AND revoked = FALSE
-  AND expires_at > NOW()
-LIMIT 1
-`
-
-func (q *Queries) GetRefreshToken(ctx context.Context, token string) (RefreshToken, error) {
-	row := q.db.QueryRow(ctx, getRefreshToken, token)
-	var i RefreshToken
-	err := row.Scan(
-		&i.Token,
-		&i.UserID,
-		&i.ExpiresAt,
-		&i.Revoked,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, full_name, created_at, updated_at FROM users
-WHERE email = $1
+SELECT id, email, password_hash, full_name, created_at, updated_at, token_version FROM users
+WHERE LOWER(email) = LOWER($1)
 LIMIT 1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByEmail, email)
+func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, lower)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -175,12 +185,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.FullName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, full_name, created_at, updated_at FROM users
+SELECT id, email, password_hash, full_name, created_at, updated_at, token_version FROM users
 WHERE id = $1
 LIMIT 1
 `
@@ -195,8 +206,20 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.FullName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
+}
+
+const incrementUserTokenVersion = `-- name: IncrementUserTokenVersion :exec
+UPDATE users
+SET token_version = token_version + 1
+WHERE id = $1
+`
+
+func (q *Queries) IncrementUserTokenVersion(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, incrementUserTokenVersion, id)
+	return err
 }
 
 const listOrgMembershipsByUser = `-- name: ListOrgMembershipsByUser :many

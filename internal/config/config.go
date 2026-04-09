@@ -9,16 +9,25 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const (
+	minJWTSecretLength   = 32
+	placeholderJWTSecret = "changeme-use-openssl-rand-base64-32"
+)
+
 type Config struct {
-	Port           string
-	Env            string
-	DatabaseURL    string
-	RedisURL       string
-	JWTSecret      string
-	AppBaseURL     string
-	AllowedOrigins []string
-	JWTExpiry      time.Duration
-	RefreshExpiry  time.Duration
+	Port               string
+	Env                string
+	DatabaseURL        string
+	RedisURL           string
+	JWTSecret          string
+	ResendAPIKey       string
+	EmailFrom          string
+	EmailFromName      string
+	MetricsBearerToken string
+	AppBaseURL         string
+	AllowedOrigins     []string
+	JWTExpiry          time.Duration
+	RefreshExpiry      time.Duration
 }
 
 func Load() (*Config, error) {
@@ -26,12 +35,16 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Port:        getEnv("PORT", "8080"),
-		Env:         getEnv("ENV", "development"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		RedisURL:    os.Getenv("REDIS_URL"),
-		JWTSecret:   os.Getenv("JWT_SECRET"),
-		AppBaseURL:  os.Getenv("APP_BASE_URL"),
+		Port:               getEnv("PORT", "8080"),
+		Env:                getEnv("ENV", "development"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		RedisURL:           os.Getenv("REDIS_URL"),
+		JWTSecret:          os.Getenv("JWT_SECRET"),
+		ResendAPIKey:       os.Getenv("RESEND_API_KEY"),
+		EmailFrom:          os.Getenv("EMAIL_FROM"),
+		EmailFromName:      os.Getenv("EMAIL_FROM_NAME"),
+		MetricsBearerToken: os.Getenv("METRICS_BEARER_TOKEN"),
+		AppBaseURL:         os.Getenv("APP_BASE_URL"),
 	}
 
 	var err error
@@ -75,6 +88,14 @@ func (c *Config) validate() error {
 
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+	}
+
+	if c.JWTSecret == placeholderJWTSecret {
+		return fmt.Errorf("JWT_SECRET must be changed from the example placeholder value")
+	}
+
+	if len(c.JWTSecret) < minJWTSecretLength {
+		return fmt.Errorf("JWT_SECRET must be at least %d characters", minJWTSecretLength)
 	}
 
 	return nil

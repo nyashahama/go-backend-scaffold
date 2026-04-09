@@ -4,7 +4,7 @@ services:
   backend:
     build: .
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -13,7 +13,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgres://user:password@postgres:5432/scaffold?sslmode=disable
+      - DATABASE_URL=postgres://user:change-me-local-dev@postgres:5432/scaffold?sslmode=disable
       - REDIS_URL=redis://redis:6379
     profiles:
       - full  # Only starts with: docker compose --profile full up
@@ -21,10 +21,10 @@ services:
   postgres:
     image: postgres:17-alpine
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: change-me-local-dev
       POSTGRES_DB: scaffold
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -37,7 +37,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
