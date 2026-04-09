@@ -26,8 +26,8 @@ test-integration:
 	go test ./tests/integration/... -v -race -tags=integration
 
 test-ci:
-	go test ./...
-	go test ./tests/integration/... -tags=integration
+	go test ./... -race
+	go test ./tests/integration/... -v -race -tags=integration
 
 smoke:
 	go test ./cmd/server ./internal/server ./internal/auth -v

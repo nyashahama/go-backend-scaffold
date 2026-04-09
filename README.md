@@ -28,8 +28,7 @@ cp .env.example .env
 # Replace JWT_SECRET before running the server
 make docker-up
 make migrate-up
-make test
-make test-integration
+make test-ci
 make run
 ```
 
@@ -46,6 +45,16 @@ For a full containerized stack, including the backend container, run:
 ```bash
 docker compose --profile full up --build
 ```
+
+## Quality Gates
+
+GitHub Actions verifies the startup path promised in this README:
+
+- database migrations apply cleanly against a fresh Postgres service
+- `make test-ci` passes, which runs the repository test sweep plus integration tests with race detection
+- `docker build -t go-backend-scaffold:ci .` succeeds
+
+CI does not currently run `make bootstrap-smoke`; use that locally when you want a clean-path clone-and-boot check.
 
 ## Auth Endpoints
 
@@ -78,7 +87,7 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 | `make build` | Compile to `bin/server` |
 | `make test` | Unit tests |
 | `make test-integration` | Integration tests (requires migrated local DB + Redis) |
-| `make test-ci` | Full package test sweep plus integration tests |
+| `make test-ci` | CI test gate: full package sweep plus integration tests, both with `-race` |
 | `make smoke` | Focused server/auth package check |
 | `make bootstrap-smoke` | Verified clean-path bootstrap check |
 | `make test-all` | Both |
