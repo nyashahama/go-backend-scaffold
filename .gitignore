@@ -4,6 +4,7 @@ bin/
 
 # Environment
 .env
+.worktrees/
 
 # Go
 *.exe

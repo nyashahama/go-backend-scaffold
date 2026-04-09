@@ -6,9 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  DATABASE_URL: postgres://user:change-me-local-dev@localhost:5432/scaffold?sslmode=disable
+  REDIS_URL: redis://localhost:6379
+
 jobs:
-  test:
-    name: Lint, Build & Test
+  verify:
+    name: Startup Readiness
     runs-on: ubuntu-latest
 
     services:
@@ -16,7 +20,7 @@ jobs:
         image: postgres:17-alpine
         env:
           POSTGRES_USER: user
-          POSTGRES_PASSWORD: password
+          POSTGRES_PASSWORD: change-me-local-dev
           POSTGRES_DB: scaffold
         ports:
           - 5432:5432
@@ -49,18 +53,13 @@ jobs:
         run: go install github.com/pressly/goose/v3/cmd/goose@latest
 
       - name: Run migrations
-        env:
-          DATABASE_URL: postgres://user:password@localhost:5432/scaffold?sslmode=disable
-        run: goose -dir db/migrations postgres "$DATABASE_URL" up
+        run: make migrate-up
 
       - name: Lint
         uses: golangci/golangci-lint-action@v9
 
-      - name: Unit tests
-        run: go test ./internal/... -race -cover
+      - name: Run documented CI test gate
+        run: make test-ci
 
-      - name: Integration tests
-        env:
-          DATABASE_URL: postgres://user:password@localhost:5432/scaffold?sslmode=disable
-          REDIS_URL: redis://localhost:6379
-        run: go test ./tests/integration/... -v -race -tags=integration
+      - name: Verify Docker image build
+        run: docker build -t go-backend-scaffold:ci .

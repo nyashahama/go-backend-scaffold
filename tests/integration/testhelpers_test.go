@@ -3,21 +3,28 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	dbgen "github.com/nyashahama/go-backend-scaffold/db/gen"
 	"github.com/nyashahama/go-backend-scaffold/internal/auth"
+	"github.com/nyashahama/go-backend-scaffold/internal/config"
+	"github.com/nyashahama/go-backend-scaffold/internal/notification"
 	"github.com/nyashahama/go-backend-scaffold/internal/platform/database"
+	"github.com/nyashahama/go-backend-scaffold/internal/platform/health"
+	"github.com/nyashahama/go-backend-scaffold/internal/server"
 )
 
 var (
@@ -25,6 +32,14 @@ var (
 	testRedis *redis.Client
 	testLog   *slog.Logger
 )
+
+type redisHealthChecker struct {
+	client *redis.Client
+}
+
+func (r redisHealthChecker) Ping(ctx context.Context) error {
+	return r.client.Ping(ctx).Err()
+}
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -93,6 +108,107 @@ func decodeSuccess[T any](t *testing.T, recorder *httptest.ResponseRecorder) T {
 		t.Fatalf("decode success envelope: %v", err)
 	}
 	return envelope.Data
+}
+
+func resetRouterState(t *testing.T) {
+	t.Helper()
+
+	if _, err := testPool.Exec(context.Background(), `
+		TRUNCATE TABLE refresh_tokens, org_memberships, orgs, users CASCADE
+	`); err != nil {
+		t.Fatalf("truncate auth tables: %v", err)
+	}
+
+	if err := testRedis.FlushDB(context.Background()).Err(); err != nil {
+		t.Fatalf("flush redis: %v", err)
+	}
+}
+
+func newAuthRouter(t *testing.T, sender notification.Sender) http.Handler {
+	t.Helper()
+
+	if sender == nil {
+		sender = &notification.NoopSender{}
+	}
+
+	svc := auth.NewService(
+		testPool, testRedis, sender,
+		testJWTSigningKey, "http://localhost:3000",
+		15*time.Minute, 7*24*time.Hour,
+	)
+
+	cfg := &config.Config{
+		Env:            "test",
+		JWTSecret:      testJWTSigningKey,
+		AllowedOrigins: []string{"http://localhost:3000"},
+		JWTExpiry:      15 * time.Minute,
+		RefreshExpiry:  7 * 24 * time.Hour,
+	}
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	return server.NewRouter(cfg, logger, testPool.Q, testRedis, server.Handlers{
+		Health: health.New(nil, nil),
+		Auth:   auth.NewHandler(svc),
+	})
+}
+
+func newStartupRouter(t *testing.T) http.Handler {
+	t.Helper()
+
+	svc := auth.NewService(
+		testPool, testRedis, &notification.NoopSender{},
+		testJWTSigningKey, "http://localhost:3000",
+		15*time.Minute, 7*24*time.Hour,
+	)
+
+	cfg := &config.Config{
+		Env:            "test",
+		JWTSecret:      testJWTSigningKey,
+		AllowedOrigins: []string{"http://localhost:3000"},
+		JWTExpiry:      15 * time.Minute,
+		RefreshExpiry:  7 * 24 * time.Hour,
+	}
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	return server.NewRouter(cfg, logger, testPool.Q, testRedis, server.Handlers{
+		Health: health.New(testPool, redisHealthChecker{client: testRedis}),
+		Auth:   auth.NewHandler(svc),
+	})
+}
+
+func jsonReader(t *testing.T, payload map[string]string) *bytes.Reader {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	return bytes.NewReader(body)
+}
+
+func registerViaRouter(t *testing.T, router http.Handler, email, password string) auth.AuthResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", jsonReader(t, map[string]string{
+		"email":     email,
+		"password":  password,
+		"full_name": "Security Test User",
+	}))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("register status=%d body=%s", w.Code, w.Body.String())
+	}
+	return decodeSuccess[auth.AuthResponse](t, w)
+}
+
+func authRequest(method, path, accessToken string, body io.Reader) *http.Request {
+	req := httptest.NewRequest(method, path, body)
+	if accessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+	}
+	return req
 }
 
 func withAuthContext(r *http.Request, accessToken, jwtSecret string) *http.Request {

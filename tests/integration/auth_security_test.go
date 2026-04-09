@@ -3,27 +3,18 @@
 package integration
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 
 	dbgen "github.com/nyashahama/go-backend-scaffold/db/gen"
 	"github.com/nyashahama/go-backend-scaffold/internal/auth"
-	"github.com/nyashahama/go-backend-scaffold/internal/config"
-	"github.com/nyashahama/go-backend-scaffold/internal/notification"
-	"github.com/nyashahama/go-backend-scaffold/internal/platform/health"
-	"github.com/nyashahama/go-backend-scaffold/internal/server"
 )
 
 type captureSender struct {
@@ -33,82 +24,6 @@ type captureSender struct {
 func (c *captureSender) SendPasswordReset(_ context.Context, _, resetURL string) error {
 	c.resetURL = resetURL
 	return nil
-}
-
-func resetAuthState(t *testing.T) {
-	t.Helper()
-
-	if _, err := testPool.Exec(context.Background(), `
-		TRUNCATE TABLE refresh_tokens, org_memberships, orgs, users CASCADE
-	`); err != nil {
-		t.Fatalf("truncate auth tables: %v", err)
-	}
-
-	if err := testRedis.FlushDB(context.Background()).Err(); err != nil {
-		t.Fatalf("flush redis: %v", err)
-	}
-}
-
-func newAuthRouter(t *testing.T, sender notification.Sender) http.Handler {
-	t.Helper()
-
-	if sender == nil {
-		sender = &notification.NoopSender{}
-	}
-
-	svc := auth.NewService(
-		testPool, testRedis, sender,
-		testJWTSigningKey, "http://localhost:3000",
-		15*time.Minute, 7*24*time.Hour,
-	)
-
-	cfg := &config.Config{
-		Env:            "test",
-		JWTSecret:      testJWTSigningKey,
-		AllowedOrigins: []string{"http://localhost:3000"},
-		JWTExpiry:      15 * time.Minute,
-		RefreshExpiry:  7 * 24 * time.Hour,
-	}
-
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	return server.NewRouter(cfg, logger, testPool.Q, testRedis, server.Handlers{
-		Health: health.New(nil, nil),
-		Auth:   auth.NewHandler(svc),
-	})
-}
-
-func jsonReader(t *testing.T, payload map[string]string) *bytes.Reader {
-	t.Helper()
-	body, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("marshal payload: %v", err)
-	}
-	return bytes.NewReader(body)
-}
-
-func registerViaRouter(t *testing.T, router http.Handler, email, password string) auth.AuthResponse {
-	t.Helper()
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", jsonReader(t, map[string]string{
-		"email":     email,
-		"password":  password,
-		"full_name": "Security Test User",
-	}))
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("register status=%d body=%s", w.Code, w.Body.String())
-	}
-	return decodeSuccess[auth.AuthResponse](t, w)
-}
-
-func authRequest(method, path, accessToken string, body io.Reader) *http.Request {
-	req := httptest.NewRequest(method, path, body)
-	if accessToken != "" {
-		req.Header.Set("Authorization", "Bearer "+accessToken)
-	}
-	return req
 }
 
 func addOrgMembership(t *testing.T, userID string, role auth.Role) dbgen.Org {
@@ -137,7 +52,7 @@ func addOrgMembership(t *testing.T, userID string, role auth.Role) dbgen.Org {
 }
 
 func TestAuth_RegisterRejectsWeakPassword(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	router := newAuthRouter(t, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", jsonReader(t, map[string]string{
@@ -155,7 +70,7 @@ func TestAuth_RegisterRejectsWeakPassword(t *testing.T) {
 }
 
 func TestAuth_RegisterNormalizesEmailForUniqueness(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	router := newAuthRouter(t, nil)
 
 	lower := uniqueEmail(t)
@@ -186,7 +101,7 @@ func TestAuth_RegisterNormalizesEmailForUniqueness(t *testing.T) {
 }
 
 func TestAuth_LoginStoresHashedRefreshToken(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	router := newAuthRouter(t, nil)
 
 	reg := registerViaRouter(t, router, uniqueEmail(t), testPassword)
@@ -209,7 +124,7 @@ func TestAuth_LoginStoresHashedRefreshToken(t *testing.T) {
 }
 
 func TestAuth_LogoutInvalidatesExistingAccessToken(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	router := newAuthRouter(t, nil)
 
 	reg := registerViaRouter(t, router, uniqueEmail(t), testPassword)
@@ -237,7 +152,7 @@ func TestAuth_LogoutInvalidatesExistingAccessToken(t *testing.T) {
 }
 
 func TestAuth_ChangePasswordInvalidatesExistingAccessToken(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	router := newAuthRouter(t, nil)
 
 	reg := registerViaRouter(t, router, uniqueEmail(t), testPassword)
@@ -260,7 +175,7 @@ func TestAuth_ChangePasswordInvalidatesExistingAccessToken(t *testing.T) {
 }
 
 func TestAuth_ForgotPasswordDoesNotStoreRawResetToken(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	sender := &captureSender{}
 	router := newAuthRouter(t, sender)
 
@@ -297,7 +212,7 @@ func TestAuth_ForgotPasswordDoesNotStoreRawResetToken(t *testing.T) {
 }
 
 func TestAuth_ResetPasswordInvalidatesExistingAccessToken(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	sender := &captureSender{}
 	router := newAuthRouter(t, sender)
 
@@ -339,7 +254,7 @@ func TestAuth_ResetPasswordInvalidatesExistingAccessToken(t *testing.T) {
 }
 
 func TestAuth_RefreshRejectsConcurrentReuse(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	router := newAuthRouter(t, nil)
 	reg := registerViaRouter(t, router, uniqueEmail(t), testPassword)
 
@@ -387,7 +302,7 @@ func TestAuth_RefreshRejectsConcurrentReuse(t *testing.T) {
 }
 
 func TestAuth_ResetPasswordRejectsConcurrentReuse(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	sender := &captureSender{}
 	router := newAuthRouter(t, sender)
 
@@ -456,7 +371,7 @@ func TestAuth_ResetPasswordRejectsConcurrentReuse(t *testing.T) {
 }
 
 func TestAuth_LoginRequiresExplicitOrgSelectionForMultiOrgUser(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	router := newAuthRouter(t, nil)
 
 	email := uniqueEmail(t)
@@ -475,7 +390,7 @@ func TestAuth_LoginRequiresExplicitOrgSelectionForMultiOrgUser(t *testing.T) {
 }
 
 func TestAuth_LoginWithExplicitOrgSelectionUsesRequestedOrg(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	router := newAuthRouter(t, nil)
 
 	email := uniqueEmail(t)
@@ -507,7 +422,7 @@ func TestAuth_LoginWithExplicitOrgSelectionUsesRequestedOrg(t *testing.T) {
 }
 
 func TestAuth_RefreshPreservesSelectedOrgForMultiOrgUser(t *testing.T) {
-	resetAuthState(t)
+	resetRouterState(t)
 	router := newAuthRouter(t, nil)
 
 	email := uniqueEmail(t)

@@ -1,18 +1,18 @@
 # go-backend-scaffold
 
-A production-ready Go backend scaffold. Clone it, rename the module, and build your next API.
+A production-ready Go backend scaffold. Clone it, initialize the module path safely, and build your next API.
 
 **Stack:** chi · pgx/v5 · sqlc · goose · JWT · Redis · Prometheus · slog · Docker · GitHub Actions
 
 ## Quickstart
 
-### 1. Clone and rename
+### 1. Clone and initialize
 
 ```bash
 git clone https://github.com/nyashahama/go-backend-scaffold.git my-api
 cd my-api
-find . -type f -name "*.go" -exec sed -i 's|github.com/nyashahama/go-backend-scaffold|github.com/yourname/my-api|g' {} +
-sed -i 's|github.com/nyashahama/go-backend-scaffold|github.com/yourname/my-api|g' go.mod
+# Run this once before making project-specific edits.
+bash scripts/init-template.sh github.com/yourname/my-api
 ```
 
 ### 2. Install tools
@@ -21,32 +21,33 @@ sed -i 's|github.com/nyashahama/go-backend-scaffold|github.com/yourname/my-api|g
 make install-tools
 ```
 
-### 3. Start local services
-
-```bash
-make docker-up
-```
-
-### 4. Configure environment
+### Verified Local Bootstrap
 
 ```bash
 cp .env.example .env
-# Edit .env — at minimum set JWT_SECRET to a real local secret
-```
-
-### 5. Run migrations
-
-```bash
+# Replace JWT_SECRET before running the server
+make docker-up
 make migrate-up
-```
-
-This uses `DATABASE_URL` from your environment or `.env`.
-
-### 6. Start the server
-
-```bash
+make test-ci
 make run
 ```
+
+If you want to verify the template from a clean path, run:
+
+```bash
+make bootstrap-smoke
+```
+
+When you are deciding whether this scaffold is ready to hand to a random startup adopter, run:
+
+```bash
+make ready-for-adopters
+```
+
+This assumes the local toolchain is current enough to lint and test the module, typically after `make install-tools`.
+
+Before a real deployment, complete the [adoption checklist](docs/adoption-checklist.md).
+Read the explicit release gate definition in [docs/startup-readiness.md](docs/startup-readiness.md).
 
 The server starts on `http://localhost:8080`.
 
@@ -55,6 +56,16 @@ For a full containerized stack, including the backend container, run:
 ```bash
 docker compose --profile full up --build
 ```
+
+## Quality Gates
+
+GitHub Actions verifies core quality gates for this scaffold:
+
+- database migrations apply cleanly against a fresh Postgres service
+- lint passes, and `make test-ci` passes, which runs the repository test sweep plus integration tests with race detection
+- `docker build -t go-backend-scaffold:ci .` succeeds
+
+CI does not claim to prove the full local startup/bootstrap flow. `make ready-for-adopters` is the final local release gate for this scaffold: it runs `make lint`, `make test-ci`, `make bootstrap-smoke`, and a Docker build. It does not replace the [adoption checklist](docs/adoption-checklist.md) or startup-specific production hardening. See [docs/startup-readiness.md](docs/startup-readiness.md) for the exact standard.
 
 ## Auth Endpoints
 
@@ -87,6 +98,10 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 | `make build` | Compile to `bin/server` |
 | `make test` | Unit tests |
 | `make test-integration` | Integration tests (requires migrated local DB + Redis) |
+| `make test-ci` | CI test gate: full package sweep plus integration tests, both with `-race` |
+| `make smoke` | Focused server/auth package check |
+| `make bootstrap-smoke` | Verified clean-path bootstrap check |
+| `make ready-for-adopters` | Final local release gate: lint, `test-ci`, bootstrap smoke, and Docker build |
 | `make test-all` | Both |
 | `make lint` | golangci-lint |
 | `make fmt` | gofmt + goimports |
@@ -99,7 +114,7 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 
 ## Environment
 
-Copy `.env.example` to `.env` and update values as needed.
+Copy `.env.example` to `.env` and update values as needed. `JWT_SECRET` must not remain the example placeholder.
 
 | Variable | Purpose |
 |----------|---------|
@@ -114,11 +129,11 @@ Copy `.env.example` to `.env` and update values as needed.
 
 ## Release
 
-Tag a commit to trigger the release workflow:
+Tag a commit to trigger your repository's release workflow after you update ownership-specific settings such as the GitHub org/user, container registry path, and image names:
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-This builds the binary, attaches it to the GitHub Release, and pushes a Docker image to `ghcr.io/nyashahama/go-backend-scaffold`.
+The scaffold can publish a GitHub Release and container image, but adopters must point that flow at their own repository and registry before using it.
