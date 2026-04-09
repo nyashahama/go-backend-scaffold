@@ -4,9 +4,10 @@ Use this scaffold as a starting point, not a production-ready drop-in. Complete 
 
 ## 1. Repository Initialization
 
-- Run `bash scripts/init-template.sh <your-module-path>` once in a fresh clone.
+- Run `bash scripts/init-template.sh <your-module-path>` once in a fresh, clean clone before making project-specific edits.
 - Confirm `go.mod` and internal imports now point at your module path instead of the scaffold's original module path.
 - Rename the repository, binary/image tags, and any remaining project-facing labels that should match your company or product.
+- Update release automation, container registry ownership, and image names so they publish to your organization rather than the scaffold author's defaults.
 
 ## 2. Secrets And Environment
 

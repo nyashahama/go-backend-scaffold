@@ -11,6 +11,7 @@ A production-ready Go backend scaffold. Clone it, initialize the module path saf
 ```bash
 git clone https://github.com/nyashahama/go-backend-scaffold.git my-api
 cd my-api
+# Run this once before making project-specific edits.
 bash scripts/init-template.sh github.com/yourname/my-api
 ```
 
@@ -118,11 +119,11 @@ Copy `.env.example` to `.env` and update values as needed. `JWT_SECRET` must not
 
 ## Release
 
-Tag a commit to trigger the release workflow:
+Tag a commit to trigger your repository's release workflow after you update ownership-specific settings such as the GitHub org/user, container registry path, and image names:
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-This builds the binary, attaches it to the GitHub Release, and pushes a Docker image to `ghcr.io/nyashahama/go-backend-scaffold`.
+The scaffold can publish a GitHub Release and container image, but adopters must point that flow at their own repository and registry before using it.
