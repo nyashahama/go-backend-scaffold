@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/nyashahama/go-backend-scaffold/internal/platform/response"
 )
@@ -27,6 +26,7 @@ type registerRequest struct {
 type loginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	OrgID    string `json:"org_id"`
 }
 
 type refreshRequest struct {
@@ -49,13 +49,26 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
 		return
 	}
-	req.Email = normalizeEmail(req.Email)
 	if req.Email == "" || req.Password == "" || req.FullName == "" {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "email, password, and full_name are required")
 		return
 	}
+	normalizedEmail, err := normalizeEmail(req.Email)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid email address")
+		return
+	}
+	req.Email = normalizedEmail
 	res, err := h.service.Register(r.Context(), req.Email, req.Password, req.FullName)
 	if err != nil {
+		if errors.Is(err, ErrInvalidEmail) {
+			response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid email address")
+			return
+		}
+		if errors.Is(err, ErrWeakPassword) {
+			response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "password does not meet complexity requirements")
+			return
+		}
 		if errors.Is(err, ErrEmailExists) {
 			response.Error(w, http.StatusConflict, response.CodeConflict, "email already registered")
 			return
@@ -73,13 +86,26 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid request body")
 		return
 	}
-	req.Email = normalizeEmail(req.Email)
 	if req.Email == "" || req.Password == "" {
 		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "email and password are required")
 		return
 	}
-	res, err := h.service.Login(r.Context(), req.Email, req.Password)
+	normalizedEmail, err := normalizeEmail(req.Email)
 	if err != nil {
+		response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid email address")
+		return
+	}
+	req.Email = normalizedEmail
+	res, err := h.service.Login(r.Context(), req.Email, req.Password, req.OrgID)
+	if err != nil {
+		if errors.Is(err, ErrOrgSelectionRequired) {
+			response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "org_id is required for multi-org users")
+			return
+		}
+		if errors.Is(err, ErrInvalidOrgSelection) {
+			response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "invalid org_id")
+			return
+		}
 		if errors.Is(err, ErrInvalidCredentials) {
 			response.Error(w, http.StatusUnauthorized, response.CodeUnauthorized, "invalid credentials")
 			return
@@ -151,7 +177,13 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSONStrict(r.Body, &req); err != nil {
 		req.Email = ""
 	}
-	req.Email = normalizeEmail(req.Email)
+	if req.Email != "" {
+		if normalized, err := normalizeEmail(req.Email); err == nil {
+			req.Email = normalized
+		} else {
+			req.Email = ""
+		}
+	}
 	// Always 200 — prevents email enumeration
 	_ = h.service.ForgotPassword(r.Context(), req.Email)
 	response.JSON(w, http.StatusOK, map[string]string{
@@ -174,6 +206,10 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.ResetPassword(r.Context(), req.Token, req.Password); err != nil {
+		if errors.Is(err, ErrWeakPassword) {
+			response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "password does not meet complexity requirements")
+			return
+		}
 		if errors.Is(err, ErrInvalidToken) {
 			response.Error(w, http.StatusUnauthorized, response.CodeUnauthorized, "invalid or expired reset token")
 			return
@@ -203,16 +239,14 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.ChangePassword(r.Context(), identity.UserID, req.CurrentPassword, req.NewPassword); err != nil {
 		if errors.Is(err, ErrWrongPassword) {
 			response.Error(w, http.StatusUnauthorized, response.CodeUnauthorized, "current password is incorrect")
+		} else if errors.Is(err, ErrWeakPassword) {
+			response.Error(w, http.StatusBadRequest, response.CodeBadRequest, "password does not meet complexity requirements")
 		} else {
 			response.Error(w, http.StatusInternalServerError, response.CodeInternalError, "failed to update password")
 		}
 		return
 	}
 	response.NoContent(w)
-}
-
-func normalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func decodeJSONStrict(r io.Reader, dst any) error {

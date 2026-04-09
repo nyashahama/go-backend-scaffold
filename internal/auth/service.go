@@ -2,10 +2,9 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,10 +20,14 @@ import (
 
 // Sentinel errors.
 var (
-	ErrEmailExists        = errors.New("email already registered")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrInvalidToken       = errors.New("invalid or expired token")
-	ErrWrongPassword      = errors.New("current password is incorrect")
+	ErrEmailExists          = errors.New("email already registered")
+	ErrInvalidEmail         = errors.New("invalid email address")
+	ErrInvalidCredentials   = errors.New("invalid credentials")
+	ErrInvalidOrgSelection  = errors.New("invalid org selection")
+	ErrInvalidToken         = errors.New("invalid or expired token")
+	ErrOrgSelectionRequired = errors.New("org selection required")
+	ErrWeakPassword         = errors.New("password does not meet complexity requirements")
+	ErrWrongPassword        = errors.New("current password is incorrect")
 )
 
 // Response types returned by the service.
@@ -60,7 +63,7 @@ type MeResponse struct {
 // Servicer is the interface Handler depends on (enables test mocks).
 type Servicer interface {
 	Register(ctx context.Context, email, password, fullName string) (*AuthResponse, error)
-	Login(ctx context.Context, email, password string) (*AuthResponse, error)
+	Login(ctx context.Context, email, password, orgID string) (*AuthResponse, error)
 	Refresh(ctx context.Context, refreshToken string) (*RefreshResponse, error)
 	Logout(ctx context.Context, refreshToken string) error
 	Me(ctx context.Context, userID, orgID string) (*MeResponse, error)
@@ -99,9 +102,15 @@ func NewService(
 }
 
 func (s *Service) Register(ctx context.Context, email, password, fullName string) (*AuthResponse, error) {
-	email = normalizeEmail(email)
+	email, err := normalizeEmail(email)
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePassword(password); err != nil {
+		return nil, err
+	}
 
-	_, err := s.db.Q.GetUserByEmail(ctx, email)
+	_, err = s.db.Q.GetUserByEmail(ctx, email)
 	if err == nil {
 		return nil, ErrEmailExists
 	}
@@ -145,11 +154,14 @@ func (s *Service) Register(ctx context.Context, email, password, fullName string
 		return nil, err
 	}
 
-	return s.issueTokens(ctx, user, org.ID.String(), string(RoleAdmin))
+	return s.issueTokens(ctx, user, org.ID, string(RoleAdmin))
 }
 
-func (s *Service) Login(ctx context.Context, email, password string) (*AuthResponse, error) {
-	email = normalizeEmail(email)
+func (s *Service) Login(ctx context.Context, email, password, orgID string) (*AuthResponse, error) {
+	email, err := normalizeEmail(email)
+	if err != nil {
+		return nil, ErrInvalidCredentials
+	}
 
 	user, err := s.db.Q.GetUserByEmail(ctx, email)
 	if err != nil {
@@ -171,21 +183,22 @@ func (s *Service) Login(ctx context.Context, email, password string) (*AuthRespo
 		return nil, ErrInvalidCredentials
 	}
 
-	m := memberships[0]
-	return s.issueTokens(ctx, user, m.OrgID.String(), m.Role)
-}
-
-func (s *Service) Refresh(ctx context.Context, refreshToken string) (*RefreshResponse, error) {
-	newRefreshToken, err := GenerateRefreshToken()
+	m, err := selectMembership(memberships, orgID)
 	if err != nil {
 		return nil, err
 	}
+	return s.issueTokens(ctx, user, m.OrgID, m.Role)
+}
 
-	var user dbgen.User
-	var membership dbgen.OrgMembership
+func (s *Service) Refresh(ctx context.Context, refreshToken string) (*RefreshResponse, error) {
+	var (
+		user            dbgen.User
+		newRefreshToken string
+		m               dbgen.OrgMembership
+	)
 
-	err = database.WithTxQueries(ctx, s.db, func(q *dbgen.Queries) error {
-		rt, txErr := q.ConsumeRefreshToken(ctx, refreshToken)
+	err := database.WithTxQueries(ctx, s.db, func(q *dbgen.Queries) error {
+		rt, txErr := q.ConsumeRefreshToken(ctx, hashOpaqueToken(refreshToken))
 		if txErr != nil {
 			if errors.Is(txErr, pgx.ErrNoRows) {
 				return ErrInvalidToken
@@ -195,21 +208,32 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*RefreshRes
 
 		user, txErr = q.GetUserByID(ctx, rt.UserID)
 		if txErr != nil {
+			if errors.Is(txErr, pgx.ErrNoRows) {
+				return ErrInvalidToken
+			}
 			return txErr
 		}
 
-		memberships, txErr := q.ListOrgMembershipsByUser(ctx, user.ID)
+		m, txErr = q.GetOrgMembershipByUser(ctx, dbgen.GetOrgMembershipByUserParams{
+			UserID: user.ID,
+			OrgID:  rt.OrgID,
+		})
+		if txErr != nil {
+			if errors.Is(txErr, pgx.ErrNoRows) {
+				return ErrInvalidToken
+			}
+			return txErr
+		}
+
+		newRefreshToken, txErr = GenerateRefreshToken()
 		if txErr != nil {
 			return txErr
 		}
-		if len(memberships) == 0 {
-			return ErrInvalidToken
-		}
-		membership = memberships[0]
 
 		_, txErr = q.CreateRefreshToken(ctx, dbgen.CreateRefreshTokenParams{
-			Token:     newRefreshToken,
+			Token:     hashOpaqueToken(newRefreshToken),
 			UserID:    user.ID,
+			OrgID:     m.OrgID,
 			ExpiresAt: time.Now().Add(s.refreshExpiry),
 		})
 		return txErr
@@ -218,7 +242,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*RefreshRes
 		return nil, err
 	}
 
-	accessToken, err := GenerateAccessToken(user.ID.String(), membership.OrgID.String(), membership.Role, s.jwtSecret, s.jwtExpiry)
+	accessToken, err := GenerateAccessToken(user.ID.String(), m.OrgID.String(), m.Role, user.TokenVersion, s.jwtSecret, s.jwtExpiry)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +255,19 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*RefreshRes
 }
 
 func (s *Service) Logout(ctx context.Context, refreshToken string) error {
-	return s.db.Q.RevokeRefreshToken(ctx, refreshToken)
+	return database.WithTxQueries(ctx, s.db, func(q *dbgen.Queries) error {
+		rt, err := q.ConsumeRefreshToken(ctx, hashOpaqueToken(refreshToken))
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		if err := q.IncrementUserTokenVersion(ctx, rt.UserID); err != nil {
+			return err
+		}
+		return q.RevokeAllUserRefreshTokens(ctx, rt.UserID)
+	})
 }
 
 func (s *Service) Me(ctx context.Context, userID, orgID string) (*MeResponse, error) {
@@ -271,7 +307,10 @@ func (s *Service) Me(ctx context.Context, userID, orgID string) (*MeResponse, er
 }
 
 func (s *Service) ForgotPassword(ctx context.Context, email string) error {
-	email = normalizeEmail(email)
+	email, err := normalizeEmail(email)
+	if err != nil {
+		return nil
+	}
 
 	user, err := s.db.Q.GetUserByEmail(ctx, email)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -281,13 +320,12 @@ func (s *Service) ForgotPassword(ctx context.Context, email string) error {
 		return err
 	}
 
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
+	token, err := GenerateRefreshToken()
+	if err != nil {
 		return err
 	}
-	token := hex.EncodeToString(b)
 
-	key := "pwreset:" + token
+	key := passwordResetCacheKey(token)
 	if err := s.cache.Set(ctx, key, user.ID.String(), time.Hour).Err(); err != nil {
 		return err
 	}
@@ -297,11 +335,23 @@ func (s *Service) ForgotPassword(ctx context.Context, email string) error {
 	}
 
 	resetURL := fmt.Sprintf("%s/auth/reset-password?token=%s", s.appBaseURL, token)
-	return s.sender.SendPasswordReset(ctx, user.Email, resetURL)
+	if err := s.sender.SendPasswordReset(ctx, user.Email, resetURL); err != nil {
+		slog.Default().Error("failed to send password reset email",
+			"error", err,
+			"user_id", user.ID.String(),
+			"email", user.Email,
+		)
+		return nil
+	}
+	return nil
 }
 
 func (s *Service) ResetPassword(ctx context.Context, token, password string) error {
-	key := "pwreset:" + token
+	if err := validatePassword(password); err != nil {
+		return err
+	}
+
+	key := passwordResetCacheKey(token)
 	userIDStr, err := s.cache.GetDel(ctx, key).Result()
 	if err != nil {
 		return ErrInvalidToken
@@ -324,6 +374,9 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 		}); txErr != nil {
 			return txErr
 		}
+		if txErr := q.IncrementUserTokenVersion(ctx, uid); txErr != nil {
+			return txErr
+		}
 		return q.RevokeAllUserRefreshTokens(ctx, uid)
 	})
 	if err != nil {
@@ -333,6 +386,10 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 }
 
 func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, nextPassword string) error {
+	if err := validatePassword(nextPassword); err != nil {
+		return err
+	}
+
 	uid, err := uuid.Parse(userID)
 	if err != nil {
 		return ErrInvalidToken
@@ -359,13 +416,16 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, n
 		}); txErr != nil {
 			return txErr
 		}
+		if txErr := q.IncrementUserTokenVersion(ctx, uid); txErr != nil {
+			return txErr
+		}
 		return q.RevokeAllUserRefreshTokens(ctx, uid)
 	})
 }
 
 // issueTokens creates an access + refresh token pair and persists the refresh token.
-func (s *Service) issueTokens(ctx context.Context, user dbgen.User, orgID, role string) (*AuthResponse, error) {
-	accessToken, err := GenerateAccessToken(user.ID.String(), orgID, role, s.jwtSecret, s.jwtExpiry)
+func (s *Service) issueTokens(ctx context.Context, user dbgen.User, orgID uuid.UUID, role string) (*AuthResponse, error) {
+	accessToken, err := GenerateAccessToken(user.ID.String(), orgID.String(), role, user.TokenVersion, s.jwtSecret, s.jwtExpiry)
 	if err != nil {
 		return nil, err
 	}
@@ -376,8 +436,9 @@ func (s *Service) issueTokens(ctx context.Context, user dbgen.User, orgID, role 
 	}
 
 	_, err = s.db.Q.CreateRefreshToken(ctx, dbgen.CreateRefreshTokenParams{
-		Token:     refreshToken,
+		Token:     hashOpaqueToken(refreshToken),
 		UserID:    user.ID,
+		OrgID:     orgID,
 		ExpiresAt: time.Now().Add(s.refreshExpiry),
 	})
 	if err != nil {
@@ -399,4 +460,30 @@ func (s *Service) issueTokens(ctx context.Context, user dbgen.User, orgID, role 
 func isUniqueEmailViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func selectMembership(memberships []dbgen.OrgMembership, orgID string) (dbgen.OrgMembership, error) {
+	if len(memberships) == 0 {
+		return dbgen.OrgMembership{}, ErrInvalidCredentials
+	}
+
+	if orgID == "" {
+		if len(memberships) == 1 {
+			return memberships[0], nil
+		}
+		return dbgen.OrgMembership{}, ErrOrgSelectionRequired
+	}
+
+	requestedOrgID, err := uuid.Parse(orgID)
+	if err != nil {
+		return dbgen.OrgMembership{}, ErrInvalidOrgSelection
+	}
+
+	for _, membership := range memberships {
+		if membership.OrgID == requestedOrgID {
+			return membership, nil
+		}
+	}
+
+	return dbgen.OrgMembership{}, ErrInvalidOrgSelection
 }

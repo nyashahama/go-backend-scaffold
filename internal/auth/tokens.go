@@ -9,24 +9,40 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+const (
+	accessTokenIssuer   = "go-backend-scaffold"
+	accessTokenAudience = "go-backend-scaffold-api"
+)
+
 // Claims holds JWT payload fields beyond the registered set.
 type Claims struct {
-	OrgID string `json:"org_id"`
-	Role  string `json:"role"`
+	OrgID        string `json:"org_id"`
+	Role         string `json:"role"`
+	TokenVersion int32  `json:"token_version"`
 	jwt.RegisteredClaims
 }
 
 // GenerateAccessToken creates a signed HS256 JWT for the given user.
-func GenerateAccessToken(userID, orgID, role, secret string, expiry time.Duration) (string, error) {
+func GenerateAccessToken(userID, orgID, role string, tokenVersion int32, secret string, expiry time.Duration) (string, error) {
 	if secret == "" {
 		return "", errors.New("auth: secret must not be empty")
 	}
+
+	jti, err := GenerateRefreshToken()
+	if err != nil {
+		return "", err
+	}
+
 	now := time.Now()
 	claims := Claims{
-		OrgID: orgID,
-		Role:  role,
+		OrgID:        orgID,
+		Role:         role,
+		TokenVersion: tokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
 			Subject:   userID,
+			Issuer:    accessTokenIssuer,
+			Audience:  []string{accessTokenAudience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(expiry)),
 		},
@@ -46,12 +62,18 @@ func GenerateRefreshToken() (string, error) {
 
 // ValidateAccessToken parses and validates a JWT, returning its claims.
 func ValidateAccessToken(tokenStr, secret string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
-		}
-		return []byte(secret), nil
-	})
+	token, err := jwt.ParseWithClaims(
+		tokenStr,
+		&Claims{},
+		func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, errors.New("unexpected signing method")
+			}
+			return []byte(secret), nil
+		},
+		jwt.WithIssuer(accessTokenIssuer),
+		jwt.WithAudience(accessTokenAudience),
+	)
 	if err != nil {
 		return nil, err
 	}

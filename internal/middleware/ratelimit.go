@@ -28,10 +28,11 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Han
 				return
 			}
 
-			key := fmt.Sprintf("ratelimit:%s", clientIP(r))
+			ip := clientIP(r)
+			key := fmt.Sprintf("ratelimit:%s", ip)
 			count, err := rateLimitScript.Run(r.Context(), rdb, []string{key}, window.Milliseconds()).Int64()
 			if err != nil {
-				next.ServeHTTP(w, r)
+				response.Error(w, http.StatusServiceUnavailable, response.CodeInternalError, "rate limiter unavailable")
 				return
 			}
 
@@ -46,18 +47,40 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Han
 }
 
 func clientIP(r *http.Request) string {
-	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); forwarded != "" {
-		return forwarded
-	}
-	if realIP := strings.TrimSpace(r.Header.Get("X-Real-Ip")); realIP != "" {
-		return realIP
-	}
-
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
 	}
+
+	ip := net.ParseIP(host)
+	if ip != nil && (ip.IsLoopback() || ip.IsPrivate()) {
+		if forwarded := firstForwardedIP(r.Header.Get("X-Forwarded-For")); forwarded != "" {
+			return forwarded
+		}
+		if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" && net.ParseIP(realIP) != nil {
+			return realIP
+		}
+	}
+
 	return host
+}
+
+func firstForwardedIP(xff string) string {
+	if xff == "" {
+		return ""
+	}
+
+	for _, part := range strings.Split(xff, ",") {
+		candidate := strings.TrimSpace(part)
+		if candidate == "" {
+			continue
+		}
+		if net.ParseIP(candidate) != nil {
+			return candidate
+		}
+	}
+
+	return ""
 }
 
 func shouldSkipRateLimit(path string) bool {
