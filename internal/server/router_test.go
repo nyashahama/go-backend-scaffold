@@ -80,3 +80,43 @@ func TestNewRouter_ProtectsMetricsWithBearerToken(t *testing.T) {
 		t.Fatalf("authorized status=%d, want 200", authW.Code)
 	}
 }
+
+func TestNewRouter_HealthzExposedWithoutAuth(t *testing.T) {
+	cfg := &config.Config{JWTSecret: "test-secret-that-is-long-enough"}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handlers := Handlers{
+		Health: health.New(nil, nil),
+		Auth:   auth.NewHandler(nil),
+	}
+
+	router := NewRouter(cfg, logger, nil, nil, handlers)
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("Authorization", "Bearer definitely-not-required")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", w.Code)
+	}
+}
+
+func TestNewRouter_ReadyzExposedWithoutAuth(t *testing.T) {
+	cfg := &config.Config{JWTSecret: "test-secret-that-is-long-enough"}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handlers := Handlers{
+		Health: health.New(nil, nil),
+		Auth:   auth.NewHandler(nil),
+	}
+
+	router := NewRouter(cfg, logger, nil, nil, handlers)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req.Header.Set("Authorization", "Bearer definitely-not-required")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", w.Code)
+	}
+}
