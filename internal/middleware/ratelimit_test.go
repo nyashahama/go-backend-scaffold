@@ -28,7 +28,11 @@ func TestRateLimit_FailsClosedWhenRedisUnavailable(t *testing.T) {
 		ReadTimeout:  20 * time.Millisecond,
 		WriteTimeout: 20 * time.Millisecond,
 	})
-	defer rdb.Close()
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			t.Fatalf("close redis client: %v", err)
+		}
+	}()
 
 	handler := RateLimit(rdb, 100, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -27,13 +27,7 @@ func TestResendSender_SendPasswordResetFormatsMessage(t *testing.T) {
 		fromEmail: "no-reply@example.com",
 		fromName:  "Example App",
 		sendEmail: func(_ context.Context, msg resendEmail) error {
-			captured = capturedEmail{
-				From:    msg.From,
-				To:      msg.To,
-				Subject: msg.Subject,
-				HTML:    msg.HTML,
-				ReplyTo: msg.ReplyTo,
-			}
+			captured = capturedEmail(msg)
 			return nil
 		},
 	}
