@@ -78,16 +78,16 @@ func RateLimit(rdb *redis.Client, opts RateLimitOptions) func(http.Handler) http
 }
 
 func policyForRequest(r *http.Request) RateLimitPolicy {
-	switch {
-	case r.URL.Path == "/api/v1/auth/login":
+	switch r.URL.Path {
+	case "/api/v1/auth/login":
 		return RateLimitPolicy{Name: "auth-login", Limit: 10, Window: time.Minute, Scope: RateLimitScopeAuthEmailIP}
-	case r.URL.Path == "/api/v1/auth/forgot-password":
+	case "/api/v1/auth/forgot-password":
 		return RateLimitPolicy{Name: "auth-forgot-password", Limit: 5, Window: 15 * time.Minute, Scope: RateLimitScopeAuthEmailIP}
-	case r.URL.Path == "/api/v1/auth/reset-password":
+	case "/api/v1/auth/reset-password":
 		return RateLimitPolicy{Name: "auth-reset-password", Limit: 10, Window: 15 * time.Minute, Scope: RateLimitScopeIP}
-	case r.URL.Path == "/api/v1/auth/refresh":
+	case "/api/v1/auth/refresh":
 		return RateLimitPolicy{Name: "auth-refresh", Limit: 20, Window: time.Minute, Scope: RateLimitScopeIP}
-	case r.URL.Path == "/api/v1/auth/register":
+	case "/api/v1/auth/register":
 		return RateLimitPolicy{Name: "auth-register", Limit: 10, Window: 15 * time.Minute, Scope: RateLimitScopeAuthEmailIP}
 	default:
 		return RateLimitPolicy{Name: "default", Limit: 100, Window: time.Minute, Scope: RateLimitScopeIP}
