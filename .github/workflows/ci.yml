@@ -71,4 +71,4 @@ jobs:
         run: docker build -t go-backend-scaffold:ci .
 
       - name: Scan Docker image for high and critical vulnerabilities
-        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.57.1 image --severity HIGH,CRITICAL --exit-code 1 --no-progress go-backend-scaffold:ci
+        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.57.1 image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --no-progress go-backend-scaffold:ci
