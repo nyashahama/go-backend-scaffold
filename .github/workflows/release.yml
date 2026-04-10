@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
 
+env:
+  DATABASE_URL: postgres://user:change-me-local-dev@localhost:5432/scaffold?sslmode=disable
+  REDIS_URL: redis://localhost:6379
+
 jobs:
   release:
     name: Build & Release
@@ -13,14 +17,55 @@ jobs:
       contents: write
       packages: write
 
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: change-me-local-dev
+          POSTGRES_DB: scaffold
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.25.9'
           cache: true
+
+      - name: Install release verification tools
+        run: |
+          go install github.com/pressly/goose/v3/cmd/goose@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run migrations
+        run: make migrate-up
+
+      - name: Run release verification
+        run: |
+          make test-ci
+
+      - name: Check Go dependencies for known vulnerabilities
+        continue-on-error: true
+        run: make security-check
 
       - name: Build binary
         run: |
@@ -41,11 +86,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ghcr.io/${{ github.repository }}:latest
+      - name: Build Docker image
+        run: docker build -t ghcr.io/${{ github.repository }}:${{ github.ref_name }} .
+
+      - name: Scan Docker image for high and critical vulnerabilities
+        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.57.1 image --severity HIGH,CRITICAL --exit-code 1 --no-progress ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+
+      - name: Tag Docker image as latest
+        run: docker tag ghcr.io/${{ github.repository }}:${{ github.ref_name }} ghcr.io/${{ github.repository }}:latest
+
+      - name: Push Docker images
+        run: |
+          docker push ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          docker push ghcr.io/${{ github.repository }}:latest

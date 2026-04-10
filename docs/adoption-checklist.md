@@ -14,6 +14,7 @@ Use this scaffold as a starting point, not a production-ready drop-in. Complete 
 - Replace every example or placeholder secret before shared environments or production use.
 - Set a strong `JWT_SECRET` and store it in your secret manager rather than committing it.
 - Review `.env.example` and remove variables your startup will not support, or document the ones you add.
+- If you deploy behind a reverse proxy or ingress, set `TRUST_PROXY_HEADERS=true` only after you restrict `TRUSTED_PROXY_CIDRS` to the proxy networks you actually trust.
 
 ## 3. Data Stores And Migrations
 
@@ -26,10 +27,12 @@ Use this scaffold as a starting point, not a production-ready drop-in. Complete 
 - Decide how accounts are created and whether self-serve registration should stay enabled.
 - Configure a real email sender for password reset flows, or explicitly disable those endpoints until it exists.
 - Review token expiry, CORS, and `APP_BASE_URL` settings so they match your deployed clients.
+- Review the default auth rate limits and tighten or replace them if your product has higher-risk login or reset flows.
 
 ## 5. Delivery And Operations
 
 - Run `make test-ci` and `make bootstrap-smoke` on your branch before treating the template as adopted.
+- Run `make security-check` and review any findings before production release.
 - Add CI/CD for your own repository, container registry, and deployment target.
 - Verify health checks, logs, metrics, and alerting are wired into your runtime environment.
 

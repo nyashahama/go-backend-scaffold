@@ -3,7 +3,6 @@ package server
 import (
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -30,7 +29,12 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, users middleware.UserRea
 	r.Use(middleware.Metrics)
 	r.Use(middleware.Logger(logger))
 	r.Use(middleware.CORS(cfg.AllowedOrigins))
-	r.Use(middleware.RateLimit(rdb, 100, 1*time.Minute))
+	r.Use(middleware.RateLimit(rdb, middleware.RateLimitOptions{
+		ClientIP: middleware.ClientIPOptions{
+			TrustProxyHeaders: cfg.TrustProxyHeaders,
+			TrustedProxies:    cfg.TrustedProxyCIDRs,
+		},
+	}))
 
 	// Infrastructure endpoints (no auth, no versioning)
 	r.Get("/healthz", h.Health.Healthz)

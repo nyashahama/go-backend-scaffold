@@ -62,10 +62,11 @@ docker compose --profile full up --build
 GitHub Actions verifies core quality gates for this scaffold:
 
 - database migrations apply cleanly against a fresh Postgres service
-- lint passes, and `make test-ci` passes, which runs the repository test sweep plus integration tests with race detection
+- lint passes and `make test-ci` passes
 - `docker build -t go-backend-scaffold:ci .` succeeds
+- the Go dependency graph and built container image are scanned in CI/release so maintainers can triage findings before adoption or release
 
-CI does not claim to prove the full local startup/bootstrap flow. `make ready-for-adopters` is the final local release gate for this scaffold: it runs `make lint`, `make test-ci`, `make bootstrap-smoke`, and a Docker build. It does not replace the [adoption checklist](docs/adoption-checklist.md) or startup-specific production hardening. See [docs/startup-readiness.md](docs/startup-readiness.md) for the exact standard.
+CI does not claim to prove the full local startup/bootstrap flow. `make ready-for-adopters` is the final local release gate for this scaffold: it runs `make lint`, `make bootstrap-smoke`, and a Docker build. Run `make security-check` separately and review the results as part of release triage. It does not replace the [adoption checklist](docs/adoption-checklist.md) or startup-specific production hardening. See [docs/startup-readiness.md](docs/startup-readiness.md) for the exact standard.
 
 ## Auth Endpoints
 
@@ -99,9 +100,10 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 | `make test` | Unit tests |
 | `make test-integration` | Integration tests (requires migrated local DB + Redis) |
 | `make test-ci` | CI test gate: full package sweep plus integration tests, both with `-race` |
+| `make security-check` | Run `govulncheck` package scanning under Go `1.25.9` for dependency triage |
 | `make smoke` | Focused server/auth package check |
 | `make bootstrap-smoke` | Verified clean-path bootstrap check |
-| `make ready-for-adopters` | Final local release gate: lint, `test-ci`, bootstrap smoke, and Docker build |
+| `make ready-for-adopters` | Final local release gate: lint, bootstrap smoke, and Docker build |
 | `make test-all` | Both |
 | `make lint` | golangci-lint |
 | `make fmt` | gofmt + goimports |
@@ -126,6 +128,8 @@ Copy `.env.example` to `.env` and update values as needed. `JWT_SECRET` must not
 | `REFRESH_EXPIRY` | Refresh-token lifetime |
 | `APP_BASE_URL` | Base URL used in password-reset links |
 | `ALLOWED_ORIGINS` | Comma-separated browser origins allowed by CORS |
+| `TRUST_PROXY_HEADERS` | Set to `true` only when the app sits behind a trusted reverse proxy or ingress |
+| `TRUSTED_PROXY_CIDRS` | Comma-separated CIDR list for the proxy networks allowed to supply forwarded client IP headers |
 
 ## Release
 

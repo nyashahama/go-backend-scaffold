@@ -1,4 +1,4 @@
-.PHONY: run build clean test test-integration test-all test-ci smoke \
+.PHONY: run build clean test test-integration test-all test-ci smoke security-check \
         bootstrap-smoke ready-for-adopters lint fmt generate migrate-up migrate-down \
         migrate-create migrate-status docker-up docker-down seed install-tools
 
@@ -23,21 +23,27 @@ test:
 	go test ./internal/... -v -race
 
 test-integration:
+	DATABASE_URL="$${DATABASE_URL:-postgres://user:change-me-local-dev@localhost:5432/scaffold?sslmode=disable}" \
+	REDIS_URL="$${REDIS_URL:-redis://localhost:6379}" \
 	go test ./tests/integration/... -v -race -tags=integration
 
 test-ci:
 	go test ./... -race
+	DATABASE_URL="$${DATABASE_URL:-postgres://user:change-me-local-dev@localhost:5432/scaffold?sslmode=disable}" \
+	REDIS_URL="$${REDIS_URL:-redis://localhost:6379}" \
 	go test ./tests/integration/... -v -race -tags=integration
 
 smoke:
 	go test ./cmd/server ./internal/server ./internal/auth -v
+
+security-check:
+	GOTOOLCHAIN=go1.25.9 govulncheck -scan package ./...
 
 bootstrap-smoke:
 	bash scripts/ci/bootstrap-smoke.sh
 
 ready-for-adopters:
 	$(MAKE) lint
-	$(MAKE) test-ci
 	$(MAKE) bootstrap-smoke
 	docker build -t go-backend-scaffold:ready .
 
@@ -101,3 +107,4 @@ install-tools:
 	go install github.com/pressly/goose/v3/cmd/goose@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install golang.org/x/tools/cmd/goimports@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
