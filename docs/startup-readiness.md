@@ -15,14 +15,13 @@ Use a current local Go toolchain and current project tools before relying on thi
 `make ready-for-adopters` is the final local release gate for this repository. It runs:
 
 1. `golangci-lint run ./...`
-2. `make test-ci`
-3. `make bootstrap-smoke`
-4. `docker build -t go-backend-scaffold:ready .`
+2. `make bootstrap-smoke`
+3. `docker build -t go-backend-scaffold:ready .`
 
 Passing this gate means the current branch has cleared the strongest local checks the scaffold exposes today:
 
 - static analysis passes
-- the documented CI test gate passes, including the repository test sweep and integration tests with race detection
+- a clean-path bootstrap runs the repository test sweep and integration tests on isolated local service ports
 - a clean-path bootstrap works without assuming an already prepared local Postgres or Redis setup
 - the Docker image still builds
 
@@ -31,6 +30,7 @@ Passing this gate means the current branch has cleared the strongest local check
 This command is intentionally narrow. It does not replace:
 
 - the [adoption checklist](adoption-checklist.md)
+- dependency and image vulnerability triage
 - startup-specific production hardening
 - environment-specific deployment validation
 - ownership changes such as module path, repository naming, registries, and release automation

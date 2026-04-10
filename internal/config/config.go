@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +28,8 @@ type Config struct {
 	MetricsBearerToken string
 	AppBaseURL         string
 	AllowedOrigins     []string
+	TrustProxyHeaders  bool
+	TrustedProxyCIDRs  []*net.IPNet
 	JWTExpiry          time.Duration
 	RefreshExpiry      time.Duration
 }
@@ -48,6 +52,14 @@ func Load() (*Config, error) {
 	}
 
 	var err error
+
+	if cfg.TrustProxyHeaders, err = parseBool("TRUST_PROXY_HEADERS", false); err != nil {
+		return nil, err
+	}
+	cfg.TrustedProxyCIDRs, err = parseCIDRs("TRUSTED_PROXY_CIDRS")
+	if err != nil {
+		return nil, err
+	}
 	cfg.JWTExpiry, err = parseDuration("JWT_EXPIRY", 15*time.Minute)
 	if err != nil {
 		return nil, err
@@ -118,4 +130,38 @@ func parseDuration(key string, fallback time.Duration) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid duration for %s: %w", key, err)
 	}
 	return d, nil
+}
+
+func parseBool(key string, fallback bool) (bool, error) {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseBool(val)
+	if err != nil {
+		return false, fmt.Errorf("invalid boolean for %s: %w", key, err)
+	}
+	return parsed, nil
+}
+
+func parseCIDRs(key string) ([]*net.IPNet, error) {
+	val := os.Getenv(key)
+	if strings.TrimSpace(val) == "" {
+		return nil, nil
+	}
+
+	var cidrs []*net.IPNet
+	for _, part := range strings.Split(val, ",") {
+		candidate := strings.TrimSpace(part)
+		if candidate == "" {
+			continue
+		}
+		_, network, err := net.ParseCIDR(candidate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cidr for %s: %q", key, candidate)
+		}
+		cidrs = append(cidrs, network)
+	}
+
+	return cidrs, nil
 }

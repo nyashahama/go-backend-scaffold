@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -20,7 +23,30 @@ end
 return count
 `)
 
-func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Handler) http.Handler {
+type ClientIPOptions struct {
+	TrustProxyHeaders bool
+	TrustedProxies    []*net.IPNet
+}
+
+type RateLimitScope string
+
+const (
+	RateLimitScopeIP          RateLimitScope = "ip"
+	RateLimitScopeAuthEmailIP RateLimitScope = "auth_email_ip"
+)
+
+type RateLimitPolicy struct {
+	Name   string
+	Limit  int
+	Window time.Duration
+	Scope  RateLimitScope
+}
+
+type RateLimitOptions struct {
+	ClientIP ClientIPOptions
+}
+
+func RateLimit(rdb *redis.Client, opts RateLimitOptions) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if shouldSkipRateLimit(r.URL.Path) || rdb == nil {
@@ -28,15 +54,20 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Han
 				return
 			}
 
-			ip := clientIP(r)
-			key := fmt.Sprintf("ratelimit:%s", ip)
-			count, err := rateLimitScript.Run(r.Context(), rdb, []string{key}, window.Milliseconds()).Int64()
+			policy := policyForRequest(r)
+			key, ok := rateLimitKey(r, opts.ClientIP, policy)
+			if !ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			count, err := rateLimitScript.Run(r.Context(), rdb, []string{key}, policy.Window.Milliseconds()).Int64()
 			if err != nil {
 				response.Error(w, http.StatusServiceUnavailable, response.CodeInternalError, "rate limiter unavailable")
 				return
 			}
 
-			if count > int64(limit) {
+			if count > int64(policy.Limit) {
 				response.Error(w, http.StatusTooManyRequests, response.CodeRateLimited, "too many requests")
 				return
 			}
@@ -46,14 +77,49 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Han
 	}
 }
 
-func clientIP(r *http.Request) string {
+func policyForRequest(r *http.Request) RateLimitPolicy {
+	switch r.URL.Path {
+	case "/api/v1/auth/login":
+		return RateLimitPolicy{Name: "auth-login", Limit: 10, Window: time.Minute, Scope: RateLimitScopeAuthEmailIP}
+	case "/api/v1/auth/forgot-password":
+		return RateLimitPolicy{Name: "auth-forgot-password", Limit: 5, Window: 15 * time.Minute, Scope: RateLimitScopeAuthEmailIP}
+	case "/api/v1/auth/reset-password":
+		return RateLimitPolicy{Name: "auth-reset-password", Limit: 10, Window: 15 * time.Minute, Scope: RateLimitScopeIP}
+	case "/api/v1/auth/refresh":
+		return RateLimitPolicy{Name: "auth-refresh", Limit: 20, Window: time.Minute, Scope: RateLimitScopeIP}
+	case "/api/v1/auth/register":
+		return RateLimitPolicy{Name: "auth-register", Limit: 10, Window: 15 * time.Minute, Scope: RateLimitScopeAuthEmailIP}
+	default:
+		return RateLimitPolicy{Name: "default", Limit: 100, Window: time.Minute, Scope: RateLimitScopeIP}
+	}
+}
+
+func rateLimitKey(r *http.Request, clientOpts ClientIPOptions, policy RateLimitPolicy) (string, bool) {
+	ip := clientIP(r, clientOpts)
+	if ip == "" {
+		return "", false
+	}
+
+	switch policy.Scope {
+	case RateLimitScopeAuthEmailIP:
+		email := requestEmail(r)
+		if email == "" {
+			return fmt.Sprintf("ratelimit:%s:ip:%s", policy.Name, ip), true
+		}
+		return fmt.Sprintf("ratelimit:%s:ip:%s:email:%s", policy.Name, ip, email), true
+	default:
+		return fmt.Sprintf("ratelimit:%s:ip:%s", policy.Name, ip), true
+	}
+}
+
+func clientIP(r *http.Request, opts ClientIPOptions) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
 	}
 
 	ip := net.ParseIP(host)
-	if ip != nil && (ip.IsLoopback() || ip.IsPrivate()) {
+	if ip != nil && opts.TrustProxyHeaders && isTrustedProxy(ip, opts.TrustedProxies) {
 		if forwarded := firstForwardedIP(r.Header.Get("X-Forwarded-For")); forwarded != "" {
 			return forwarded
 		}
@@ -63,6 +129,15 @@ func clientIP(r *http.Request) string {
 	}
 
 	return host
+}
+
+func isTrustedProxy(ip net.IP, trusted []*net.IPNet) bool {
+	for _, network := range trusted {
+		if network != nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func firstForwardedIP(xff string) string {
@@ -81,6 +156,33 @@ func firstForwardedIP(xff string) string {
 	}
 
 	return ""
+}
+
+func requestEmail(r *http.Request) string {
+	if r.Body == nil {
+		return ""
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		r.Body = io.NopCloser(bytes.NewReader(nil))
+		return ""
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	var payload struct {
+		Email string `json:"email"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return ""
+	}
+
+	return normalizeRateLimitEmail(payload.Email)
+}
+
+func normalizeRateLimitEmail(email string) string {
+	email = strings.TrimSpace(strings.ToLower(email))
+	return email
 }
 
 func shouldSkipRateLimit(path string) bool {
