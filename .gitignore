@@ -1,6 +1,7 @@
 # Binary
 bin/
 /server
+docs/
 
 # Environment
 .env
