@@ -64,6 +64,9 @@ func TestLoad_ParsesTrustedProxyCIDRs(t *testing.T) {
 	if len(cfg.TrustedProxyCIDRs) != 2 {
 		t.Fatalf("len(TrustedProxyCIDRs)=%d, want 2", len(cfg.TrustedProxyCIDRs))
 	}
+	if cfg.JWTAccessTokenIssuer != "go-backend-scaffold" {
+		t.Fatalf("JWTAccessTokenIssuer=%q, want go-backend-scaffold", cfg.JWTAccessTokenIssuer)
+	}
 }
 
 func TestLoad_RejectsInvalidTrustedProxyCIDR(t *testing.T) {

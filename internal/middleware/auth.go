@@ -18,7 +18,7 @@ type UserReader interface {
 
 // Auth validates the Bearer JWT and injects identity into the request context.
 // Context keys are defined in the auth package to avoid import cycles.
-func Auth(jwtSecret string, users UserReader) func(http.Handler) http.Handler {
+func Auth(jwtSecret, jwtIssuer, jwtAudience string, users UserReader) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
@@ -39,7 +39,7 @@ func Auth(jwtSecret string, users UserReader) func(http.Handler) http.Handler {
 				return
 			}
 
-			claims, err := auth.ValidateAccessToken(tokenStr, jwtSecret)
+			claims, err := auth.ValidateAccessToken(tokenStr, jwtSecret, jwtIssuer, jwtAudience)
 			if err != nil {
 				response.Error(w, http.StatusUnauthorized, response.CodeUnauthorized, "invalid or expired token")
 				return

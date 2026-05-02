@@ -27,6 +27,7 @@ func newAuthHandler(t *testing.T) *auth.Handler {
 	svc := auth.NewService(
 		testPool, testRedis, &notification.NoopSender{},
 		testJWTSigningKey, "http://localhost:3000",
+		testJWTIssuer, testJWTAudience,
 		15*time.Minute, 7*24*time.Hour,
 	)
 	return auth.NewHandler(svc)

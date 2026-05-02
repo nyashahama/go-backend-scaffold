@@ -17,21 +17,23 @@ const (
 )
 
 type Config struct {
-	Port               string
-	Env                string
-	DatabaseURL        string
-	RedisURL           string
-	JWTSecret          string
-	ResendAPIKey       string
-	EmailFrom          string
-	EmailFromName      string
-	MetricsBearerToken string
-	AppBaseURL         string
-	AllowedOrigins     []string
-	TrustProxyHeaders  bool
-	TrustedProxyCIDRs  []*net.IPNet
-	JWTExpiry          time.Duration
-	RefreshExpiry      time.Duration
+	Port                   string
+	Env                    string
+	DatabaseURL            string
+	RedisURL               string
+	JWTSecret              string
+	JWTAccessTokenIssuer   string
+	JWTAccessTokenAudience string
+	ResendAPIKey           string
+	EmailFrom              string
+	EmailFromName          string
+	MetricsBearerToken     string
+	AppBaseURL             string
+	AllowedOrigins         []string
+	TrustProxyHeaders      bool
+	TrustedProxyCIDRs      []*net.IPNet
+	JWTExpiry              time.Duration
+	RefreshExpiry          time.Duration
 }
 
 func Load() (*Config, error) {
@@ -39,16 +41,18 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Port:               getEnv("PORT", "8080"),
-		Env:                getEnv("ENV", "development"),
-		DatabaseURL:        os.Getenv("DATABASE_URL"),
-		RedisURL:           os.Getenv("REDIS_URL"),
-		JWTSecret:          os.Getenv("JWT_SECRET"),
-		ResendAPIKey:       os.Getenv("RESEND_API_KEY"),
-		EmailFrom:          os.Getenv("EMAIL_FROM"),
-		EmailFromName:      os.Getenv("EMAIL_FROM_NAME"),
-		MetricsBearerToken: os.Getenv("METRICS_BEARER_TOKEN"),
-		AppBaseURL:         os.Getenv("APP_BASE_URL"),
+		Port:                   getEnv("PORT", "8080"),
+		Env:                    getEnv("ENV", "development"),
+		DatabaseURL:            os.Getenv("DATABASE_URL"),
+		RedisURL:               os.Getenv("REDIS_URL"),
+		JWTSecret:              os.Getenv("JWT_SECRET"),
+		JWTAccessTokenIssuer:   getEnv("JWT_ACCESS_TOKEN_ISSUER", "go-backend-scaffold"),
+		JWTAccessTokenAudience: getEnv("JWT_ACCESS_TOKEN_AUDIENCE", "go-backend-scaffold-api"),
+		ResendAPIKey:           os.Getenv("RESEND_API_KEY"),
+		EmailFrom:              os.Getenv("EMAIL_FROM"),
+		EmailFromName:          os.Getenv("EMAIL_FROM_NAME"),
+		MetricsBearerToken:     os.Getenv("METRICS_BEARER_TOKEN"),
+		AppBaseURL:             os.Getenv("APP_BASE_URL"),
 	}
 
 	var err error

@@ -9,11 +9,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const (
-	accessTokenIssuer   = "go-backend-scaffold"
-	accessTokenAudience = "go-backend-scaffold-api"
-)
-
 // Claims holds JWT payload fields beyond the registered set.
 type Claims struct {
 	OrgID        string `json:"org_id"`
@@ -23,9 +18,15 @@ type Claims struct {
 }
 
 // GenerateAccessToken creates a signed HS256 JWT for the given user.
-func GenerateAccessToken(userID, orgID, role string, tokenVersion int32, secret string, expiry time.Duration) (string, error) {
+func GenerateAccessToken(userID, orgID, role string, tokenVersion int32, secret, issuer, audience string, expiry time.Duration) (string, error) {
 	if secret == "" {
 		return "", errors.New("auth: secret must not be empty")
+	}
+	if issuer == "" {
+		return "", errors.New("auth: issuer must not be empty")
+	}
+	if audience == "" {
+		return "", errors.New("auth: audience must not be empty")
 	}
 
 	jti, err := GenerateRefreshToken()
@@ -41,8 +42,8 @@ func GenerateAccessToken(userID, orgID, role string, tokenVersion int32, secret 
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			Subject:   userID,
-			Issuer:    accessTokenIssuer,
-			Audience:  []string{accessTokenAudience},
+			Issuer:    issuer,
+			Audience:  []string{audience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(expiry)),
 		},
@@ -61,7 +62,7 @@ func GenerateRefreshToken() (string, error) {
 }
 
 // ValidateAccessToken parses and validates a JWT, returning its claims.
-func ValidateAccessToken(tokenStr, secret string) (*Claims, error) {
+func ValidateAccessToken(tokenStr, secret, issuer, audience string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(
 		tokenStr,
 		&Claims{},
@@ -71,8 +72,8 @@ func ValidateAccessToken(tokenStr, secret string) (*Claims, error) {
 			}
 			return []byte(secret), nil
 		},
-		jwt.WithIssuer(accessTokenIssuer),
-		jwt.WithAudience(accessTokenAudience),
+		jwt.WithIssuer(issuer),
+		jwt.WithAudience(audience),
 	)
 	if err != nil {
 		return nil, err

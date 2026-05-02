@@ -33,6 +33,11 @@ var (
 	testLog   *slog.Logger
 )
 
+const (
+	testJWTIssuer   = "go-backend-scaffold"
+	testJWTAudience = "go-backend-scaffold-api"
+)
+
 type redisHealthChecker struct {
 	client *redis.Client
 }
@@ -134,6 +139,7 @@ func newAuthRouter(t *testing.T, sender notification.Sender) http.Handler {
 	svc := auth.NewService(
 		testPool, testRedis, sender,
 		testJWTSigningKey, "http://localhost:3000",
+		testJWTIssuer, testJWTAudience,
 		15*time.Minute, 7*24*time.Hour,
 	)
 
@@ -159,6 +165,7 @@ func newStartupRouter(t *testing.T) http.Handler {
 	svc := auth.NewService(
 		testPool, testRedis, &notification.NoopSender{},
 		testJWTSigningKey, "http://localhost:3000",
+		testJWTIssuer, testJWTAudience,
 		15*time.Minute, 7*24*time.Hour,
 	)
 
@@ -212,7 +219,7 @@ func authRequest(method, path, accessToken string, body io.Reader) *http.Request
 }
 
 func withAuthContext(r *http.Request, accessToken, jwtSecret string) *http.Request {
-	claims, err := auth.ValidateAccessToken(accessToken, jwtSecret)
+	claims, err := auth.ValidateAccessToken(accessToken, jwtSecret, testJWTIssuer, testJWTAudience)
 	if err != nil {
 		panic("withAuthContext: invalid token: " + err.Error())
 	}

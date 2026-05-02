@@ -79,6 +79,8 @@ type Service struct {
 	sender        notification.Sender
 	appBaseURL    string
 	jwtSecret     string
+	jwtIssuer     string
+	jwtAudience   string
 	jwtExpiry     time.Duration
 	refreshExpiry time.Duration
 }
@@ -87,7 +89,7 @@ func NewService(
 	db *database.Pool,
 	cache *redis.Client,
 	sender notification.Sender,
-	jwtSecret, appBaseURL string,
+	jwtSecret, appBaseURL, jwtIssuer, jwtAudience string,
 	jwtExpiry, refreshExpiry time.Duration,
 ) *Service {
 	return &Service{
@@ -95,6 +97,8 @@ func NewService(
 		cache:         cache,
 		sender:        sender,
 		jwtSecret:     jwtSecret,
+		jwtIssuer:     jwtIssuer,
+		jwtAudience:   jwtAudience,
 		appBaseURL:    appBaseURL,
 		jwtExpiry:     jwtExpiry,
 		refreshExpiry: refreshExpiry,
@@ -242,7 +246,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*RefreshRes
 		return nil, err
 	}
 
-	accessToken, err := GenerateAccessToken(user.ID.String(), m.OrgID.String(), m.Role, user.TokenVersion, s.jwtSecret, s.jwtExpiry)
+	accessToken, err := GenerateAccessToken(user.ID.String(), m.OrgID.String(), m.Role, user.TokenVersion, s.jwtSecret, s.jwtIssuer, s.jwtAudience, s.jwtExpiry)
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +429,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, n
 
 // issueTokens creates an access + refresh token pair and persists the refresh token.
 func (s *Service) issueTokens(ctx context.Context, user dbgen.User, orgID uuid.UUID, role string) (*AuthResponse, error) {
-	accessToken, err := GenerateAccessToken(user.ID.String(), orgID.String(), role, user.TokenVersion, s.jwtSecret, s.jwtExpiry)
+	accessToken, err := GenerateAccessToken(user.ID.String(), orgID.String(), role, user.TokenVersion, s.jwtSecret, s.jwtIssuer, s.jwtAudience, s.jwtExpiry)
 	if err != nil {
 		return nil, err
 	}

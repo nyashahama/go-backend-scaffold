@@ -70,6 +70,7 @@ func main() {
 	authService := auth.NewService(
 		db, rdb, sender,
 		cfg.JWTSecret, cfg.AppBaseURL,
+		cfg.JWTAccessTokenIssuer, cfg.JWTAccessTokenAudience,
 		cfg.JWTExpiry, cfg.RefreshExpiry,
 	)
 

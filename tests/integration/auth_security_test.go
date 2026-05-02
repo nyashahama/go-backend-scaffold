@@ -409,7 +409,7 @@ func TestAuth_LoginWithExplicitOrgSelectionUsesRequestedOrg(t *testing.T) {
 	}
 
 	loginResp := decodeSuccess[auth.AuthResponse](t, w)
-	claims, err := auth.ValidateAccessToken(loginResp.AccessToken, testJWTSigningKey)
+	claims, err := auth.ValidateAccessToken(loginResp.AccessToken, testJWTSigningKey, testJWTIssuer, testJWTAudience)
 	if err != nil {
 		t.Fatalf("validate access token: %v", err)
 	}
@@ -449,7 +449,7 @@ func TestAuth_RefreshPreservesSelectedOrgForMultiOrgUser(t *testing.T) {
 	}
 
 	refreshResp := decodeSuccess[auth.RefreshResponse](t, refreshW)
-	claims, err := auth.ValidateAccessToken(refreshResp.AccessToken, testJWTSigningKey)
+	claims, err := auth.ValidateAccessToken(refreshResp.AccessToken, testJWTSigningKey, testJWTIssuer, testJWTAudience)
 	if err != nil {
 		t.Fatalf("validate access token: %v", err)
 	}
