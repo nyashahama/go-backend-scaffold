@@ -48,7 +48,7 @@ func NewRouter(cfg *config.Config, logger *slog.Logger, users middleware.UserRea
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
-			h.Auth.RegisterRoutes(r, middleware.Auth(cfg.JWTSecret, users))
+			h.Auth.RegisterRoutes(r, middleware.Auth(cfg.JWTSecret, cfg.JWTAccessTokenIssuer, cfg.JWTAccessTokenAudience, users))
 		})
 	})
 

@@ -144,11 +144,13 @@ func newAuthRouter(t *testing.T, sender notification.Sender) http.Handler {
 	)
 
 	cfg := &config.Config{
-		Env:            "test",
-		JWTSecret:      testJWTSigningKey,
-		AllowedOrigins: []string{"http://localhost:3000"},
-		JWTExpiry:      15 * time.Minute,
-		RefreshExpiry:  7 * 24 * time.Hour,
+		Env:                    "test",
+		JWTSecret:              testJWTSigningKey,
+		JWTAccessTokenIssuer:   testJWTIssuer,
+		JWTAccessTokenAudience: testJWTAudience,
+		AllowedOrigins:         []string{"http://localhost:3000"},
+		JWTExpiry:              15 * time.Minute,
+		RefreshExpiry:          7 * 24 * time.Hour,
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -170,11 +172,13 @@ func newStartupRouter(t *testing.T) http.Handler {
 	)
 
 	cfg := &config.Config{
-		Env:            "test",
-		JWTSecret:      testJWTSigningKey,
-		AllowedOrigins: []string{"http://localhost:3000"},
-		JWTExpiry:      15 * time.Minute,
-		RefreshExpiry:  7 * 24 * time.Hour,
+		Env:                    "test",
+		JWTSecret:              testJWTSigningKey,
+		JWTAccessTokenIssuer:   testJWTIssuer,
+		JWTAccessTokenAudience: testJWTAudience,
+		AllowedOrigins:         []string{"http://localhost:3000"},
+		JWTExpiry:              15 * time.Minute,
+		RefreshExpiry:          7 * 24 * time.Hour,
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

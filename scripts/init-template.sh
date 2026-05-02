@@ -137,8 +137,10 @@ while IFS= read -r -d '' file; do
   FILES_UPDATED=$((FILES_UPDATED + 1))
 done < <(git grep -lzF "$OLD_MODULE" -- . ':(exclude)scripts/init-template.sh')
 
-replace_in_file "$ROOT_DIR/.env.example" "__scaffold_issuer__" "$TOKEN_ISSUER"
-replace_in_file "$ROOT_DIR/.env.example" "__scaffold_audience__" "$TOKEN_AUDIENCE"
+replace_if_present "$ROOT_DIR/.env.example" "__scaffold_issuer__" "$TOKEN_ISSUER"
+replace_if_present "$ROOT_DIR/.env.example" "__scaffold_audience__" "$TOKEN_AUDIENCE"
+replace_if_present "$ROOT_DIR/.env.example" "go-backend-scaffold-api" "$TOKEN_AUDIENCE"
+replace_if_present "$ROOT_DIR/.env.example" "go-backend-scaffold" "$APP_NAME"
 replace_if_present "$ROOT_DIR/Makefile" "go-backend-scaffold" "$APP_NAME"
 replace_if_present "$ROOT_DIR/.github/workflows/ci.yml" "go-backend-scaffold" "$APP_NAME"
 replace_if_present "$ROOT_DIR/.github/workflows/release.yml" "go-backend-scaffold" "$APP_NAME"
