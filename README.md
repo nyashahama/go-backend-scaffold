@@ -90,6 +90,8 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 
 Use one package per product domain. Keep HTTP parsing in handlers, business rules in services, SQL in `db/queries`, and schema changes in migrations.
 
+`internal/exampledomain` is a copyable reference package for the first domain you add. It is intentionally not mounted in the runtime router and does not add database tables. Use it to copy the handler/service/store/routes shape, then rename the package to your real domain and replace the store interface with SQLC-backed methods.
+
 1. Create `internal/your-domain/` with `handler.go`, `service.go`, and `routes.go`.
 2. Add SQL queries to `db/queries/your-domain.sql`.
 3. Add schema changes with `make migrate-create name=your_domain`.
@@ -97,6 +99,17 @@ Use one package per product domain. Keep HTTP parsing in handlers, business rule
 5. Register the domain handler in `internal/server/router.go` by adding it to `Handlers` and mounting its routes.
 6. Construct the service/handler in `cmd/server/main.go` next to the existing auth wiring.
 7. Add focused tests beside the package first, then add integration coverage when the domain crosses auth, database, or routing boundaries.
+
+For org-scoped routes, follow the example package's route pattern:
+
+```go
+r.Use(middleware.RequireOrgAccess(func(r *http.Request) (string, bool) {
+	orgID := chi.URLParam(r, "orgID")
+	return orgID, orgID != ""
+}))
+```
+
+For owner/admin-only routes, add `middleware.RequireRole(auth.RoleOwner, auth.RoleAdmin)` after JWT auth.
 
 The intended dependency direction is:
 
