@@ -61,6 +61,7 @@ ready-for-adopters:
 	$(MAKE) lint
 	$(MAKE) vuln
 	$(MAKE) bootstrap-smoke
+	$(MAKE) init-template-smoke
 	$(MAKE) docker-build IMAGE_TAG=ready
 	$(MAKE) image-scan IMAGE_TAG=ready
 

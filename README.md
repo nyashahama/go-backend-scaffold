@@ -13,6 +13,7 @@ git clone https://github.com/nyashahama/go-backend-scaffold.git my-api
 cd my-api
 # Run this once before making project-specific edits.
 bash scripts/init-template.sh github.com/yourname/my-api
+make check-adoption
 ```
 
 ### 2. Install tools
@@ -36,6 +37,7 @@ If you want to verify the template from a clean path, run:
 
 ```bash
 make bootstrap-smoke
+make init-template-smoke
 ```
 
 When you are deciding whether this scaffold is ready to hand to a random startup adopter, run:
@@ -86,11 +88,23 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 
 ## Adding a New Domain
 
-1. Create `internal/your-domain/` with `handler.go`, `service.go`, `routes.go`
-2. Add queries to `db/queries/your-domain.sql` and run `make generate`
-3. Add a migration in `db/migrations/` with `make migrate-create name=your_domain`
-4. Register handler in `internal/server/router.go` (add to `Handlers` struct and mount routes)
-5. Wire the service in `cmd/server/main.go`
+Use one package per product domain. Keep HTTP parsing in handlers, business rules in services, SQL in `db/queries`, and schema changes in migrations.
+
+1. Create `internal/your-domain/` with `handler.go`, `service.go`, and `routes.go`.
+2. Add SQL queries to `db/queries/your-domain.sql`.
+3. Add schema changes with `make migrate-create name=your_domain`.
+4. Run `make generate` after query changes so `db/gen` stays current.
+5. Register the domain handler in `internal/server/router.go` by adding it to `Handlers` and mounting its routes.
+6. Construct the service/handler in `cmd/server/main.go` next to the existing auth wiring.
+7. Add focused tests beside the package first, then add integration coverage when the domain crosses auth, database, or routing boundaries.
+
+The intended dependency direction is:
+
+```text
+cmd/server -> internal/server -> internal/<domain> -> db/gen
+```
+
+Avoid importing one product domain directly from another until there is a real shared concept. Put shared infrastructure under `internal/platform`.
 
 ## Make Targets
 
@@ -103,6 +117,8 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 | `make test-ci` | CI test gate: full package sweep plus integration tests, both with `-race` |
 | `make smoke` | Focused server/auth package check |
 | `make bootstrap-smoke` | Verified clean-path bootstrap check |
+| `make check-adoption` | Check an initialized project for leftover scaffold ownership markers |
+| `make init-template-smoke` | Verify initialization in a temporary clean copy |
 | `make ready-for-adopters` | Final local release gate: lint, vuln scan, bootstrap smoke, Docker build, and image scan |
 | `make vuln` | Run `govulncheck ./...` |
 | `make docker-build` | Build Docker image as `$(IMAGE_NAME):$(IMAGE_TAG)` |
