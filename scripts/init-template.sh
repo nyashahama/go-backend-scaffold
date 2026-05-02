@@ -17,6 +17,8 @@ is_valid_module_path() {
 
 replace_in_file() {
   local file="$1"
+  local oldValue="${2:-$OLD_MODULE}"
+  local newValue="${3:-$NEW_MODULE}"
   local helper
 
   helper="$(mktemp "${TMPDIR:-/tmp}/init-template.XXXXXX.go")"
@@ -32,8 +34,8 @@ import (
 
 func main() {
 	path := os.Getenv("TARGET_FILE")
-	oldValue := os.Getenv("OLD_MODULE")
-	newValue := os.Getenv("NEW_MODULE")
+	oldValue := os.Getenv("OLD_VALUE")
+	newValue := os.Getenv("NEW_VALUE")
 
 	if path == "" || oldValue == "" || newValue == "" {
 		fmt.Fprintln(os.Stderr, "missing replacement context")
@@ -58,7 +60,7 @@ func main() {
 	}
 }
 EOF
-  OLD_MODULE="$OLD_MODULE" NEW_MODULE="$NEW_MODULE" TARGET_FILE="$file" go run "$helper"
+  OLD_VALUE="$oldValue" NEW_VALUE="$newValue" TARGET_FILE="$file" go run "$helper"
 }
 
 if ! command -v git >/dev/null 2>&1; then
@@ -77,6 +79,9 @@ if [[ $# -ne 1 ]]; then
 fi
 
 NEW_MODULE="$1"
+APP_NAME="${NEW_MODULE##*/}"
+TOKEN_ISSUER="${APP_NAME}"
+TOKEN_AUDIENCE="${APP_NAME}-api"
 
 if ! is_valid_module_path "$NEW_MODULE"; then
   echo "error: module path must look like github.com/yourorg/yourapp" >&2
@@ -121,6 +126,9 @@ while IFS= read -r -d '' file; do
   replace_in_file "$file"
   FILES_UPDATED=$((FILES_UPDATED + 1))
 done < <(git grep -lzF "$OLD_MODULE" -- . ':(exclude)scripts/init-template.sh')
+
+replace_in_file "$ROOT_DIR/.env.example" "__scaffold_issuer__" "$TOKEN_ISSUER"
+replace_in_file "$ROOT_DIR/.env.example" "__scaffold_audience__" "$TOKEN_AUDIENCE"
 
 if [[ "$FILES_UPDATED" -eq 0 ]]; then
   echo "error: no scaffold module references were found to rewrite" >&2
