@@ -62,11 +62,12 @@ docker compose --profile full up --build
 GitHub Actions verifies core quality gates for this scaffold:
 
 - database migrations apply cleanly against a fresh Postgres service
-- lint passes and `make test-ci` passes
-- `docker build -t go-backend-scaffold:ci .` succeeds
-- the Go dependency graph and built container image are scanned in CI/release so maintainers can triage findings before adoption or release
+- lint passes, and `make test-ci` passes, which runs the repository test sweep plus integration tests with race detection
+- `govulncheck ./...` runs against reachable Go code
+- `make docker-build IMAGE_TAG=ci` succeeds
+- `make image-scan IMAGE_TAG=ci` scans the built image for unfixed high/critical findings
 
-CI does not claim to prove the full local startup/bootstrap flow. `make ready-for-adopters` is the final local release gate for this scaffold: it runs `make lint`, `make bootstrap-smoke`, and a Docker build. Run `make security-check` separately and review the results as part of release triage. It does not replace the [adoption checklist](docs/adoption-checklist.md) or startup-specific production hardening. See [docs/startup-readiness.md](docs/startup-readiness.md) for the exact standard.
+CI does not claim to prove the full local startup/bootstrap flow. `make ready-for-adopters` is the final local release gate for this scaffold: it runs lint, Go vulnerability scanning, bootstrap smoke, Docker build, and Docker image scanning. It does not replace the [adoption checklist](docs/adoption-checklist.md) or startup-specific production hardening. See [docs/startup-readiness.md](docs/startup-readiness.md) for the exact standard.
 
 ## Auth Endpoints
 
@@ -100,10 +101,12 @@ Health: `GET /healthz` · `GET /readyz` · `GET /metrics`
 | `make test` | Unit tests |
 | `make test-integration` | Integration tests (requires migrated local DB + Redis) |
 | `make test-ci` | CI test gate: full package sweep plus integration tests, both with `-race` |
-| `make security-check` | Run `govulncheck` package scanning under Go `1.25.9` for dependency triage |
 | `make smoke` | Focused server/auth package check |
 | `make bootstrap-smoke` | Verified clean-path bootstrap check |
-| `make ready-for-adopters` | Final local release gate: lint, bootstrap smoke, and Docker build |
+| `make ready-for-adopters` | Final local release gate: lint, vuln scan, bootstrap smoke, Docker build, and image scan |
+| `make vuln` | Run `govulncheck ./...` |
+| `make docker-build` | Build Docker image as `$(IMAGE_NAME):$(IMAGE_TAG)` |
+| `make image-scan` | Scan built Docker image with Trivy |
 | `make test-all` | Both |
 | `make lint` | golangci-lint |
 | `make fmt` | gofmt + goimports |
@@ -141,3 +144,10 @@ git push origin v1.0.0
 ```
 
 The scaffold can publish a GitHub Release and container image, but adopters must point that flow at their own repository and registry before using it.
+
+Docker image targets default to `IMAGE_NAME=go-backend-scaffold` and `IMAGE_TAG=local`. Override them when checking adopter-specific builds:
+
+```bash
+make docker-build IMAGE_NAME=my-api IMAGE_TAG=dev
+make image-scan IMAGE_NAME=my-api IMAGE_TAG=dev
+```
