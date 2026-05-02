@@ -63,6 +63,16 @@ EOF
   OLD_VALUE="$oldValue" NEW_VALUE="$newValue" TARGET_FILE="$file" go run "$helper"
 }
 
+replace_if_present() {
+  local file="$1"
+  local oldValue="$2"
+  local newValue="$3"
+
+  if [[ -f "$file" ]] && grep -qF "$oldValue" "$file"; then
+    replace_in_file "$file" "$oldValue" "$newValue"
+  fi
+}
+
 if ! command -v git >/dev/null 2>&1; then
   echo "error: git is required to initialize this scaffold" >&2
   exit 1
@@ -129,6 +139,10 @@ done < <(git grep -lzF "$OLD_MODULE" -- . ':(exclude)scripts/init-template.sh')
 
 replace_in_file "$ROOT_DIR/.env.example" "__scaffold_issuer__" "$TOKEN_ISSUER"
 replace_in_file "$ROOT_DIR/.env.example" "__scaffold_audience__" "$TOKEN_AUDIENCE"
+replace_if_present "$ROOT_DIR/Makefile" "go-backend-scaffold" "$APP_NAME"
+replace_if_present "$ROOT_DIR/.github/workflows/ci.yml" "go-backend-scaffold" "$APP_NAME"
+replace_if_present "$ROOT_DIR/.github/workflows/release.yml" "go-backend-scaffold" "$APP_NAME"
+replace_if_present "$ROOT_DIR/scripts/ci/bootstrap-smoke.sh" "go-backend-scaffold-smoke" "${APP_NAME}-smoke"
 
 if [[ "$FILES_UPDATED" -eq 0 ]]; then
   echo "error: no scaffold module references were found to rewrite" >&2
