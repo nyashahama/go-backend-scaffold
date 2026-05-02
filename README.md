@@ -145,7 +145,7 @@ git push origin v1.0.0
 
 The scaffold can publish a GitHub Release and container image, but adopters must point that flow at their own repository and registry before using it.
 
-Docker image targets default to `IMAGE_NAME=go-backend-scaffold` and `IMAGE_TAG=local`. Override them when checking adopter-specific builds:
+Docker image targets default to `IMAGE_NAME=go-backend-scaffold`, `IMAGE_TAG=local`, and `DOCKER_BUILD_FLAGS=--pull`. Override them when checking adopter-specific builds:
 
 ```bash
 make docker-build IMAGE_NAME=my-api IMAGE_TAG=dev

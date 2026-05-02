@@ -5,6 +5,7 @@
 IMAGE_NAME ?= go-backend-scaffold
 IMAGE_TAG ?= local
 IMAGE ?= $(IMAGE_NAME):$(IMAGE_TAG)
+DOCKER_BUILD_FLAGS ?= --pull
 TRIVY_IMAGE ?= aquasec/trivy:latest
 
 ifneq (,$(wildcard .env))
@@ -111,7 +112,7 @@ docker-down:
 	docker compose down
 
 docker-build:
-	docker build -t $(IMAGE) .
+	docker build $(DOCKER_BUILD_FLAGS) -t $(IMAGE) .
 
 image-scan:
 	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock $(TRIVY_IMAGE) \
