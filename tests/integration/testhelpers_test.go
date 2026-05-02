@@ -51,7 +51,7 @@ func TestMain(m *testing.M) {
 	// Database
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://user:password@localhost:5432/scaffold?sslmode=disable"
+		dbURL = "postgres://user:change-me-local-dev@localhost:5432/scaffold?sslmode=disable"
 	}
 	rawPool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {

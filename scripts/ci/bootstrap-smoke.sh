@@ -66,5 +66,5 @@ trap cleanup EXIT
 
 docker compose --env-file "$SMOKE_ENV_FILE" up -d --wait postgres redis
 make migrate-up
-go test ./...
-go test ./tests/integration/... -tags=integration
+go test ./... -race
+go test ./tests/integration/... -v -race -tags=integration

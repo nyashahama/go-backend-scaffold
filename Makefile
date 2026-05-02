@@ -2,6 +2,11 @@
         bootstrap-smoke ready-for-adopters lint fmt generate migrate-up migrate-down \
         migrate-create migrate-status docker-up docker-down seed install-tools
 
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+
 # ============================================================================
 # Development
 # ============================================================================
