@@ -1,6 +1,11 @@
-.PHONY: run build clean test test-integration test-all test-ci smoke security-check \
-        bootstrap-smoke ready-for-adopters lint fmt generate migrate-up migrate-down \
-        migrate-create migrate-status docker-up docker-down seed install-tools
+.PHONY: run build clean test test-integration test-all test-ci smoke \
+        bootstrap-smoke ready-for-adopters lint fmt vuln generate migrate-up migrate-down \
+        migrate-create migrate-status docker-up docker-down docker-build image-scan seed install-tools
+
+IMAGE_NAME ?= go-backend-scaffold
+IMAGE_TAG ?= local
+IMAGE ?= $(IMAGE_NAME):$(IMAGE_TAG)
+TRIVY_IMAGE ?= aquasec/trivy:latest
 
 ifneq (,$(wildcard .env))
 include .env
@@ -41,31 +46,15 @@ test-ci:
 smoke:
 	go test ./cmd/server ./internal/server ./internal/auth -v
 
-security-check:
-	@set -e; \
-	output_file="$$(mktemp)"; \
-	if GOTOOLCHAIN=go1.25.9 govulncheck -scan package ./... >"$$output_file" 2>&1; then \
-		cat "$$output_file"; \
-		rm -f "$$output_file"; \
-		exit 0; \
-	fi; \
-	cat "$$output_file"; \
-	found_ids="$$(grep -o 'GO-[0-9-]*' "$$output_file" | sort -u | tr '\n' ' ' | sed 's/ $$//')"; \
-	rm -f "$$output_file"; \
-	allowed_ids="GO-2026-4771 GO-2026-4772"; \
-	if [ "$$found_ids" = "$$allowed_ids" ]; then \
-		echo "security-check: allowing known unfixed pgx advisories: $$found_ids"; \
-		exit 0; \
-	fi; \
-	exit 1
-
 bootstrap-smoke:
 	bash scripts/ci/bootstrap-smoke.sh
 
 ready-for-adopters:
 	$(MAKE) lint
+	$(MAKE) vuln
 	$(MAKE) bootstrap-smoke
-	docker build -t go-backend-scaffold:ready .
+	$(MAKE) docker-build IMAGE_TAG=ready
+	$(MAKE) image-scan IMAGE_TAG=ready
 
 test-all: test test-integration
 
@@ -79,6 +68,13 @@ lint:
 fmt:
 	gofmt -s -w .
 	goimports -w .
+
+vuln:
+	@if ! command -v govulncheck >/dev/null 2>&1; then \
+		echo "govulncheck not found; install it with: go install golang.org/x/vuln/cmd/govulncheck@latest"; \
+		exit 1; \
+	fi
+	govulncheck ./...
 
 # ============================================================================
 # Code Generation
@@ -113,6 +109,13 @@ docker-up:
 
 docker-down:
 	docker compose down
+
+docker-build:
+	docker build -t $(IMAGE) .
+
+image-scan:
+	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock $(TRIVY_IMAGE) \
+		image --exit-code 1 --ignore-unfixed --severity HIGH,CRITICAL $(IMAGE)
 
 # ============================================================================
 # Utilities
