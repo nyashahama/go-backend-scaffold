@@ -22,7 +22,6 @@ replace_in_file() {
   local helper
 
   helper="$(mktemp "${TMPDIR:-/tmp}/init-template.XXXXXX.go")"
-  trap 'rm -f "$helper"' RETURN
   cat >"$helper" <<'EOF'
 package main
 
@@ -61,6 +60,7 @@ func main() {
 }
 EOF
   OLD_VALUE="$oldValue" NEW_VALUE="$newValue" TARGET_FILE="$file" go run "$helper"
+  rm -f "$helper"
 }
 
 replace_if_present() {
@@ -132,6 +132,9 @@ while IFS= read -r -d '' file; do
   if [[ "$file" == "scripts/init-template.sh" ]]; then
     continue
   fi
+  if [[ "$file" == "scripts/check-adoption.sh" ]]; then
+    continue
+  fi
 
   replace_in_file "$file"
   FILES_UPDATED=$((FILES_UPDATED + 1))
@@ -141,6 +144,14 @@ replace_if_present "$ROOT_DIR/.env.example" "__scaffold_issuer__" "$TOKEN_ISSUER
 replace_if_present "$ROOT_DIR/.env.example" "__scaffold_audience__" "$TOKEN_AUDIENCE"
 replace_if_present "$ROOT_DIR/.env.example" "go-backend-scaffold-api" "$TOKEN_AUDIENCE"
 replace_if_present "$ROOT_DIR/.env.example" "go-backend-scaffold" "$APP_NAME"
+replace_if_present "$ROOT_DIR/internal/config/config.go" "go-backend-scaffold-api" "$TOKEN_AUDIENCE"
+replace_if_present "$ROOT_DIR/internal/config/config.go" "go-backend-scaffold" "$TOKEN_ISSUER"
+replace_if_present "$ROOT_DIR/internal/config/config_test.go" "go-backend-scaffold-api" "$TOKEN_AUDIENCE"
+replace_if_present "$ROOT_DIR/internal/config/config_test.go" "go-backend-scaffold" "$TOKEN_ISSUER"
+replace_if_present "$ROOT_DIR/tests/integration/testhelpers_test.go" "go-backend-scaffold-api" "$TOKEN_AUDIENCE"
+replace_if_present "$ROOT_DIR/tests/integration/testhelpers_test.go" "go-backend-scaffold" "$TOKEN_ISSUER"
+replace_if_present "$ROOT_DIR/README.md" "go-backend-scaffold" "$APP_NAME"
+replace_if_present "$ROOT_DIR/docker-compose.yml" "go-backend-scaffold" "$APP_NAME"
 replace_if_present "$ROOT_DIR/Makefile" "go-backend-scaffold" "$APP_NAME"
 replace_if_present "$ROOT_DIR/.github/workflows/ci.yml" "go-backend-scaffold" "$APP_NAME"
 replace_if_present "$ROOT_DIR/.github/workflows/release.yml" "go-backend-scaffold" "$APP_NAME"

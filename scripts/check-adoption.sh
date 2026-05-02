@@ -15,7 +15,7 @@ patterns=(
 
 found=0
 for pattern in "${patterns[@]}"; do
-  if matches="$(git grep -nF "$pattern" -- . ':(exclude)scripts/init-template.sh' ':(exclude)docs' || true)" && [[ -n "$matches" ]]; then
+  if matches="$(git grep -nF "$pattern" -- . ':(exclude)scripts/init-template.sh' ':(exclude)scripts/check-adoption.sh' ':(exclude)docs' || true)" && [[ -n "$matches" ]]; then
     echo "found stale scaffold marker: $pattern"
     echo "$matches"
     found=1

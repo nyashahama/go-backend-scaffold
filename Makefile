@@ -1,7 +1,7 @@
 .PHONY: run build clean test test-integration test-all test-ci smoke \
         bootstrap-smoke ready-for-adopters lint fmt vuln generate migrate-up migrate-down \
         migrate-create migrate-status docker-up docker-down docker-build image-scan \
-        check-adoption seed install-tools
+        check-adoption init-template-smoke seed install-tools
 
 IMAGE_NAME ?= go-backend-scaffold
 IMAGE_TAG ?= local
@@ -53,6 +53,9 @@ bootstrap-smoke:
 
 check-adoption:
 	bash scripts/check-adoption.sh
+
+init-template-smoke:
+	bash scripts/ci/init-template-smoke.sh
 
 ready-for-adopters:
 	$(MAKE) lint
