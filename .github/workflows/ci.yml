@@ -9,6 +9,8 @@ on:
 env:
   DATABASE_URL: postgres://user:change-me-local-dev@localhost:5432/scaffold?sslmode=disable
   REDIS_URL: redis://localhost:6379
+  IMAGE_NAME: go-backend-scaffold
+  IMAGE_TAG: ci
 
 jobs:
   verify:
@@ -63,12 +65,11 @@ jobs:
       - name: Run documented CI test gate
         run: make test-ci
 
-      - name: Check Go dependencies for known vulnerabilities
-        continue-on-error: true
-        run: make security-check
+      - name: Run Go vulnerability scan
+        run: make vuln
 
       - name: Verify Docker image build
-        run: docker build -t go-backend-scaffold:ci .
+        run: make docker-build
 
-      - name: Scan Docker image for high and critical vulnerabilities
-        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.57.1 image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --no-progress go-backend-scaffold:ci
+      - name: Scan Docker image
+        run: make image-scan
